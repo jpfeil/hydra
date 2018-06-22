@@ -41,7 +41,6 @@ def is_multimodal(name, expression):
     probs = model.allocModel.get_active_comp_probs()
 
     if len(probs) > 1:
-        print(name, probs)
         return name, True
 
     else:
@@ -66,7 +65,6 @@ def filter_geneset(lst, matrx, CPU=1):
         results.append(res)
 
     output = [x.get() for x in results]
-    print(output)
     return [x[0] for x in output if x[1] is True]
 
 
@@ -128,8 +126,6 @@ def main():
         mkdir_p(pth)
 
         bnpy.ioutil.ModelWriter.save_model(hmodel, pth, prefix=gs)
-
-        break
 
 if __name__ == '__main__':
     main()
