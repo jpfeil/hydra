@@ -34,12 +34,17 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def fit_model(name, data):
+def fit_model(name, dataset):
+    """
+
+    :param name:
+    :param dataset: bnpy.data.XData object
+    :return:
+    """
     gamma = 5.0
     sF = 0.1
     K = 5
 
-    dataset = bnpy.data.XData(data)
 
     workdir = tempfile.mkdtemp(prefix=name)
     outputdir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
@@ -67,12 +72,16 @@ def fit_model(name, data):
     return trained_model
 
 
-def parallel_fit(name, data):
+def parallel_fit(name, dataset, save_output=False):
+    """
+
+    :param name:
+    :param dataset: bnpy.data.XData object
+    :return:
+    """
     gamma = 5.0
     sF = 0.1
     K = 5
-
-    dataset = bnpy.data.XData(data)
 
     workdir = tempfile.mkdtemp(prefix=name)
     output_dir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
@@ -110,6 +119,9 @@ def parallel_fit(name, data):
     hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
                                                           prefix='Best')
 
-    shutil.rmtree(workdir)
+    if not save_output:
+        shutil.rmtree(workdir)
+    else:
+        print("Output:\n%s" % workdir)
 
     return hmodel

@@ -24,6 +24,16 @@ def get_genesets():
     return sets
 
 
+def get_test_genesets():
+    d = os.path.join(src, 'test', 'gene-sets')
+    sets = os.listdir(d)
+    logging.info("Available Gene Sets:")
+    for s in sets:
+        logging.info(s)
+    sets = [os.path.join(d, s) for s in sets]
+    return sets
+
+
 def read_genesets(sets):
     gs = defaultdict(set)
 
@@ -36,8 +46,9 @@ def read_genesets(sets):
     return gs
 
 
-def is_multimodal(name, expression):
-    model = parallel_fit(name, expression)
+def is_multimodal(name, data):
+    X = bnpy.data.XData(data)
+    model = parallel_fit(name, X)
     probs = model.allocModel.get_active_comp_probs()
 
     if len(probs) > 1:
@@ -68,7 +79,6 @@ def filter_geneset(lst, matrx, CPU=1):
     return [x[0] for x in output if x[1] is True]
 
 
-
 def main():
     """
     Fits one, two, and three component mixture models and returns fit information in output dir.
@@ -83,6 +93,9 @@ def main():
                         type=int,
                         default=1)
 
+    parser.add_argument('--debug',
+                        action='store_true')
+
     parser.add_argument('--output-dir',
                         dest='output_dir',
                         default='hydra-out')
@@ -94,9 +107,16 @@ def main():
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
                         level=logging.INFO)
 
+    logging.getLogger().addHandler(logging.StreamHandler())
+
     logging.info("Started Hydra...")
 
-    sets = get_genesets()
+    if args.debug:
+        sets = get_test_genesets()
+
+    else:
+        sets = get_genesets()
+
     genesets = read_genesets(sets)
 
     matrx = pd.read_csv(args.expression,
@@ -112,20 +132,49 @@ def main():
 
         start = len(genes)
         filtered_genesets[gs] = filter_geneset(list(genes), matrx, CPU=args.CPU)
-        end = len(genesets[gs])
+        end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
                                                                          x=start,
                                                                          y=end))
 
-        center = matrx.loc[filtered_genesets[gs]].apply(lambda x: x - x.mean())
+        # Make directory for output
+        gsdir = os.path.join(args.output_dir, gs)
+        mkdir_p(gsdir)
 
-        hmodel = parallel_fit(gs, center.T.values)
+        # Center data to make inference easier
+        center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean())
 
-        pth = os.path.join(args.output_dir, gs)
-        mkdir_p(pth)
+        # Save the expression data for future analysis
+        pth = os.path.join(gsdir, 'expression.tsv')
+        matrx.loc[filtered_genesets[gs]].to_csv(pth, sep='\t')
 
-        bnpy.ioutil.ModelWriter.save_model(hmodel, pth, prefix=gs)
+        # Need to take the transpose
+        # Samples x Genes
+        data = center.T.values
+
+        # Create dataset object for inference
+        dataset = bnpy.data.XData(data)
+
+        # Fit multivariate model
+        hmodel = parallel_fit(gs, dataset, save_output=True)
+
+        # Get the sample assignments
+        LP = hmodel.calc_local_params(dataset)
+        asnmts = LP['resp'].argmax(axis=1)
+
+        pth = os.path.join(gsdir, 'assignments.tsv')
+        with open(pth, 'w') as f:
+            for sample, asnmt in zip(center.columns, asnmts):
+                f.write('%s\t%s\n' % (sample, asnmt))
+
+        # Save model
+        bnpy.ioutil.ModelWriter.save_model(hmodel,
+                                           gsdir,
+                                           prefix=gs)
+
+        if args.debug:
+            break
 
 if __name__ == '__main__':
     main()
