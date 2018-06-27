@@ -19,7 +19,7 @@ def get_genesets():
     sets = os.listdir(d)
     logging.info("Available Gene Sets:")
     for s in sets:
-        logging.info(s)
+        logging.info("\t%s" % s)
     sets = [os.path.join(d, s) for s in sets]
     return sets
 
@@ -154,6 +154,12 @@ def main():
     for gs, genes in genesets.items():
         genesets[gs] = [x for x in genes if x in matrx.index]
 
+    if args.min_mean_filter is not None:
+        logging.info("Minimum gene expression mean: %0.2f" % args.min_mean_filter)
+
+    if args.min_prob_filter is not None:
+        logging.info("Minimum component probability: %0.2f" % args.min_prob_filter)
+
     filtered_genesets = defaultdict(set)
     for gs, genes in genesets.items():
 
@@ -188,7 +194,7 @@ def main():
         dataset = bnpy.data.XData(data)
 
         # Fit multivariate model
-        hmodel = parallel_fit(gs, dataset, save_output=True)
+        hmodel = parallel_fit(gs, dataset, save_output=args.debug)
 
         # Get the sample assignments
         LP = hmodel.calc_local_params(dataset)
