@@ -46,19 +46,27 @@ def read_genesets(sets):
     return gs
 
 
-def is_multimodal(name, data):
+def is_multimodal(name, data, min_prob_filter=None):
     X = bnpy.data.XData(data)
     model = parallel_fit(name, X)
     probs = model.allocModel.get_active_comp_probs()
+    min_prob = np.min(probs)
 
-    if len(probs) > 1:
+    # TODO: This is poor design, but I will
+    # refactor this later. I really
+    # want this to be filtered in a
+    # different function.
+    if min_prob < min_prob_filter:
+        return name, False
+
+    elif len(probs) > 1:
         return name, True
 
     else:
         return name, False
 
 
-def filter_geneset(lst, matrx, CPU=1):
+def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=None):
     """
 
     :param lst: List of genes
@@ -70,9 +78,16 @@ def filter_geneset(lst, matrx, CPU=1):
     results = []
     for gene in lst:
         data = matrx.loc[gene, :].values
-        data = data - np.mean(data)
+        mean = np.mean(data)
+
+        # TODO: This is poor design. I need to refactor
+        # This into a separate function
+        if mean < gene_mean_filter:
+            continue
+
+        data = data - mean
         data = data.reshape(len(data), 1)
-        res = pool.apply_async(is_multimodal, args=(gene, data,))
+        res = pool.apply_async(is_multimodal, args=(gene, data, min_prob_filter,))
         results.append(res)
 
     output = [x.get() for x in results]
@@ -92,6 +107,18 @@ def main():
                         dest='CPU',
                         type=int,
                         default=1)
+
+    parser.add_argument('--min-mean-filter',
+                        dest='min_mean_filter',
+                        help='Removes genes with an average expression below value.',
+                        type=float,
+                        default=None)
+
+    parser.add_argument('--min-prob-filter',
+                        dest='min_prob_filter',
+                        help='Removes genes with a minor component less than value.',
+                        type=float,
+                        default=None)
 
     parser.add_argument('--debug',
                         action='store_true')
@@ -131,7 +158,11 @@ def main():
     for gs, genes in genesets.items():
 
         start = len(genes)
-        filtered_genesets[gs] = filter_geneset(list(genes), matrx, CPU=args.CPU)
+        filtered_genesets[gs] = filter_geneset(list(genes),
+                                               matrx,
+                                               CPU=args.CPU,
+                                               gene_mean_filter=args.min_mean_filter,
+                                               min_prob_filter=args.min_prob_filter)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
