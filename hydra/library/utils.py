@@ -4,8 +4,10 @@ import bnpy
 import tempfile
 import shutil
 import shlex
-import subprocess
 import sys
+
+from subprocess import Popen, PIPE
+from threading import Timer
 
 
 def mkdir_p(path):
@@ -72,7 +74,26 @@ def fit_model(name, dataset):
     return trained_model
 
 
-def parallel_fit(name, dataset, save_output=False):
+def run(cmd, timeout_sec):
+    """
+    https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
+    :param cmd:
+    :param timeout_sec:
+    :return:
+    """
+    proc = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
+    timer = Timer(timeout_sec, proc.kill)
+
+    try:
+        timer.start()
+        stdout, stderr = proc.communicate()
+
+    finally:
+        timer.cancel()
+
+    return stdout, stderr
+
+def parallel_fit(name, dataset, save_output=False, timeout_sec=900):
     """
 
     :param name:
@@ -112,9 +133,7 @@ def parallel_fit(name, dataset, save_output=False):
                      sF=sF,
                      output=output_path)
 
-    subprocess.Popen(shlex.split(cmd.strip()),
-                     stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE).wait()
+    stdout, stderr = run(cmd, timeout_sec=timeout_sec)
 
     hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
                                                           prefix='Best')
