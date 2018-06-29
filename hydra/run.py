@@ -174,6 +174,9 @@ def main():
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
                                                                          x=start,
                                                                          y=end))
+        if end < 5:
+            logging.info("Skipping {gs} because there are not enough genes".format(gs=gs))
+            continue
 
         # Make directory for output
         gsdir = os.path.join(args.output_dir, gs)
