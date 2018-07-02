@@ -93,6 +93,7 @@ def run(cmd, timeout_sec):
 
     return stdout, stderr
 
+
 def parallel_fit(name, dataset, save_output=False, timeout_sec=900):
     """
 

@@ -138,6 +138,10 @@ def main():
 
     logging.info("Started Hydra...")
 
+    logging.info("Parameters:")
+    for key, value in vars(args).items():
+        logging.info('\t%s: %s' % (key, value))
+
     if args.debug:
         sets = get_test_genesets()
 
