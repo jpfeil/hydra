@@ -14,14 +14,25 @@ from library.utils import mkdir_p, parallel_fit
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def get_genesets():
-    d = os.path.join(src, 'gene-sets')
-    sets = os.listdir(d)
-    logging.info("Available Gene Sets:")
-    for s in sets:
-        logging.info("\t%s" % s)
-    sets = [os.path.join(d, s) for s in sets]
-    return sets
+def get_genesets(dirs):
+    """
+    Formats the paths to the gene set files
+
+    :param list dirs: Gene set directories
+    :return: Path to gene set files
+    :rtype: list
+    """
+    pths = []
+    for d in dirs:
+        logging.info("Pulling %s gene sets:" % d)
+        gs_dir = os.path.join(src, 'gene-sets', d)
+        gss = os.listdir(gs_dir)
+        for s in gss:
+            logging.info("\t%s" % s)
+            gs_pth = os.path.join(d, s)
+            pths.append(gs_pth)
+
+    return pths
 
 
 def get_test_genesets():
@@ -52,10 +63,7 @@ def is_multimodal(name, data, min_prob_filter=None):
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
-    # TODO: This is poor design, but I will
-    # refactor this later. I really
-    # want this to be filtered in a
-    # different function.
+    # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
         return name, False
 
@@ -80,8 +88,7 @@ def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=Non
         data = matrx.loc[gene, :].values
         mean = np.mean(data)
 
-        # TODO: This is poor design. I need to refactor
-        # This into a separate function
+        # Skip Genes that have a mean below the mean filter
         if mean < gene_mean_filter:
             continue
 
@@ -107,6 +114,18 @@ def main():
                         dest='CPU',
                         type=int,
                         default=1)
+
+    parser.add_argument('--hallmark',
+                        help='Uses hallmark gene sets',
+                        dest='hallmark',
+                        default=False,
+                        action='store_true')
+
+    parser.add_argument('--msigdb',
+                        help='Uses MSigDB gene sets',
+                        dest='msigdb',
+                        default=False,
+                        action='store_true')
 
     parser.add_argument('--min-mean-filter',
                         dest='min_mean_filter',
@@ -146,7 +165,18 @@ def main():
         sets = get_test_genesets()
 
     else:
-        sets = get_genesets()
+        dirs = ['misc']
+
+        if args.msigdb:
+            dirs = ['msigdb'] + dirs
+
+        if args.hallmark:
+            dirs = ['hallmark'] + dirs
+
+        sets = get_genesets(dirs)
+
+        if len(sets) == 0:
+            raise ValueError("Need to specify gene sets for analysis.")
 
     genesets = read_genesets(sets)
 
