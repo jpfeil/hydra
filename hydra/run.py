@@ -57,7 +57,11 @@ def read_genesets(sets):
     return gs
 
 
+analyzed = {}
 def is_multimodal(name, data, min_prob_filter=None):
+    if name in analyzed:
+        return analyzed[name]
+
     X = bnpy.data.XData(data)
     model = parallel_fit(name, X)
     probs = model.allocModel.get_active_comp_probs()
@@ -65,12 +69,15 @@ def is_multimodal(name, data, min_prob_filter=None):
 
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
+        analyzed[name] = (name, False)
         return name, False
 
     elif len(probs) > 1:
+        analyzed[name] = (name, True)
         return name, True
 
     else:
+        analyzed[name] = (name, False)
         return name, False
 
 
