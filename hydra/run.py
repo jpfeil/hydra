@@ -29,7 +29,7 @@ def get_genesets(dirs):
         gss = os.listdir(gs_dir)
         for s in gss:
             logging.info("\t%s" % s)
-            gs_pth = os.path.join(d, s)
+            gs_pth = os.path.join(gs_dir, s)
             pths.append(gs_pth)
 
     return pths
