@@ -10,6 +10,7 @@ import pandas as pd
 from collections import defaultdict
 
 from library.utils import mkdir_p, parallel_fit
+from library.notebook import create_notebook
 
 src = os.path.dirname(os.path.abspath(__file__))
 
@@ -253,6 +254,8 @@ def main():
         bnpy.ioutil.ModelWriter.save_model(hmodel,
                                            gsdir,
                                            prefix=gs)
+
+        create_notebook(gs, gsdir)
 
         if args.debug:
             break

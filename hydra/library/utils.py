@@ -141,6 +141,7 @@ def parallel_fit(name, dataset, save_output=False, timeout_sec=900):
 
     if not save_output:
         shutil.rmtree(workdir)
+
     else:
         print("Output:\n%s" % workdir)
 
