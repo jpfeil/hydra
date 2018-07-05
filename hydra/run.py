@@ -147,6 +147,12 @@ def main():
                         type=float,
                         default=None)
 
+    parser.add_argument('--min-num-filter',
+                        dest='min_num_filter',
+                        help='Skips gene sets with fewer than X multimodal genes.',
+                        type=int,
+                        default=5)
+
     parser.add_argument('--debug',
                         action='store_true')
 
@@ -216,7 +222,7 @@ def main():
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
                                                                          x=start,
                                                                          y=end))
-        if end < 5:
+        if end < args.min_num_filter:
             logging.info("Skipping {gs} because there are not enough genes".format(gs=gs))
             continue
 
