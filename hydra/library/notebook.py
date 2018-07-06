@@ -43,6 +43,9 @@ for comp in range(len(hmodel.allocModel.get_active_comp_probs())):
     m = hmodel.obsModel.get_mean_for_comp(comp)
     means.append(m)
     
+if len(means) == 1:
+    raise ValueError("Only one component was identified!")
+    
 pth = os.path.join(os.path.abspath('.'), 'expression.tsv')
 exp = pd.read_csv(pth, sep='\t', index_col=0)
 exp.head()
