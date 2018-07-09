@@ -110,7 +110,16 @@ def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=Non
 
 
 def find_aliases(gss, mapper, index):
-    # Filter genes that overlap
+    """
+    Removes genes that do not overlap with matrix. Will
+    try to rescue genes by mapping them to an alias that
+    overlaps.
+
+    :param gss:
+    :param mapper:
+    :param index:
+    :return:
+    """
     for gs, genes in gss.items():
         filtered = []
         for gene in genes:
@@ -128,7 +137,8 @@ def find_aliases(gss, mapper, index):
                                                                              gs,
                                                                              match))
                                 filtered.append(match)
-        gss[gs] = filtered
+        # Remove duplicates
+        gss[gs] = list(set(filtered))
     return gss
 
 
@@ -221,9 +231,12 @@ def main():
                         sep='\t',
                         index_col=0)
 
+    # Remove duplicates in index
+    matrx = matrx[~matrx.index.duplicated(keep='first')]
+
+    # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
     alias_mapper = pd.read_csv(pth, sep='\t')
-
     genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
     if args.min_mean_filter is not None:
