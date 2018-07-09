@@ -268,7 +268,7 @@ def main():
         mkdir_p(gsdir)
 
         # Center data to make inference easier
-        center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean())
+        center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean(), axis=1)
 
         # Save the expression data for future analysis
         pth = os.path.join(gsdir, 'expression.tsv')
