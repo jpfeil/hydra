@@ -106,7 +106,9 @@ def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=Non
         results.append(res)
 
     output = [x.get() for x in results]
-    return [x[0] for x in output if x[1] is True]
+
+    # Remove duplicate genes
+    return list(set([x[0] for x in output if x[1] is True]))
 
 
 def find_aliases(gss, mapper, index):
@@ -269,6 +271,9 @@ def main():
 
         # Center data to make inference easier
         center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean(), axis=1)
+
+        # Trying to figure out where the duplicate index is coming from
+        center = center[~center.index.duplicated(keep='first')]
 
         # Save the expression data for future analysis
         pth = os.path.join(gsdir, 'expression.tsv')
