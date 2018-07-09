@@ -109,6 +109,29 @@ def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=Non
     return [x[0] for x in output if x[1] is True]
 
 
+def find_aliases(gss, mapper, index):
+    # Filter genes that overlap
+    for gs, genes in gss.items():
+        filtered = []
+        for gene in genes:
+            if gene in index:
+                filtered.append(gene)
+
+            else:
+                aliases = mapper.loc[mapper['gene'] == gene, 'aliases']
+                if len(aliases) > 0:
+                    for alias in aliases:
+                        matches = [x for x in alias.split('|') if x in index]
+                        if len(matches) > 0:
+                            for match in matches:
+                                logging.info("Replacing %s in %s with %s" % (gene,
+                                                                             gs,
+                                                                             match))
+                                filtered.append(match)
+        gss[gs] = filtered
+    return gss
+
+
 def main():
     """
     Fits one, two, and three component mixture models and returns fit information in output dir.
@@ -198,9 +221,10 @@ def main():
                         sep='\t',
                         index_col=0)
 
-    # Filter genes that overlap
-    for gs, genes in genesets.items():
-        genesets[gs] = [x for x in genes if x in matrx.index]
+    pth = os.path.join(src, 'data/alias-mapper.gz')
+    alias_mapper = pd.read_csv(pth, sep='\t')
+
+    genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
     if args.min_mean_filter is not None:
         logging.info("Minimum gene expression mean: %0.2f" % args.min_mean_filter)
