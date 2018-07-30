@@ -1,7 +1,19 @@
+
 Run:
 ```
-./run.py --hallmark --expression exp.tsv --CPU 30 --min-prob-filter 0.10 --min-mean-filter 1.0
+docker run -it -v $(pwd):/data jpfeil/hydra:0.1.0 --hallmark --expression exp.tsv --CPU 30
 ```
+
+Output:
+The output includes the bnpy models and a jupyter notebook for exploring clusters. The jupyter 
+notebook depends on several python 2.7 libraries:
+python 2.7
+bnpy
+seaborn
+numpy
+matplotlib
+pandas 
+scipy
 
 Gene Set Sources:
 
