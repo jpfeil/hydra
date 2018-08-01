@@ -151,7 +151,7 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument('-e', '--expression',
-                        help='Gene symbol by sample matrix')
+                        help='Gene symbol by sample matrix.\nDo not center the data.')
 
     parser.add_argument('--CPU',
                         dest='CPU',
@@ -167,6 +167,18 @@ def main():
     parser.add_argument('--msigdb',
                         help='Uses MSigDB gene sets',
                         dest='msigdb',
+                        default=False,
+                        action='store_true')
+
+    parser.add_argument('--treehouse',
+                        help='Uses Treehouse gene sets',
+                        dest='treehouse',
+                        default=False,
+                        action='store_true')
+
+    parser.add_argument('--immune',
+                        help='Uses curated immune gene sets',
+                        dest='immune',
                         default=False,
                         action='store_true')
 
@@ -210,6 +222,7 @@ def main():
     for key, value in vars(args).items():
         logging.info('\t%s: %s' % (key, value))
 
+    # Determine which gene sets are included.
     if args.debug:
         sets = get_test_genesets()
 
@@ -221,6 +234,12 @@ def main():
 
         if args.hallmark:
             dirs = ['hallmark'] + dirs
+
+        if args.treehouse:
+            dirs = ['treehouse'] + dirs
+
+        if args.immune:
+            dirs = ['immune'] + dirs
 
         sets = get_genesets(dirs)
 
