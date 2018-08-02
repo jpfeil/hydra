@@ -305,8 +305,14 @@ def main():
         # Create dataset object for inference
         dataset = bnpy.data.XData(data)
 
+        gamma = 1.0
+        sF = 0.5
+        K = 5
+
+        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
+
         # Fit multivariate model
-        hmodel = parallel_fit(gs, dataset, save_output=args.debug)
+        hmodel = parallel_fit(gs, dataset, gamma, sF, K, save_output=args.debug)
 
         # Get the sample assignments
         LP = hmodel.calc_local_params(dataset)

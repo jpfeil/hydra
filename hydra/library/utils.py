@@ -36,7 +36,7 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def fit_model(name, dataset):
+def fit_model(name, dataset, gamma, sF, K):
     """
 
     :param name:
@@ -44,7 +44,7 @@ def fit_model(name, dataset):
     :return:
     """
     gamma = 1.0              # Prior on dirichlet dispersion parameter
-    sF = 1.0                 # Prior covariance matrix is Identity * sF
+    sF = 0.5                 # Prior covariance matrix is Identity * sF
     K = 5                    # Numver of initial clusters
 
 
@@ -94,16 +94,13 @@ def run(cmd, timeout_sec):
     return stdout, stderr
 
 
-def parallel_fit(name, dataset, save_output=False, timeout_sec=900):
+def parallel_fit(name, dataset, gamma, sF, K, save_output=False, timeout_sec=900):
     """
 
     :param name:
     :param dataset: bnpy.data.XData object
     :return:
     """
-    gamma = 1.0
-    sF = 1.0
-    K = 5
 
     workdir = tempfile.mkdtemp(prefix=name)
     output_dir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
