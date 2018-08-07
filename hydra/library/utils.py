@@ -36,7 +36,7 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def fit_model(name, dataset, gamma, sF, K):
+def fit_model(name, dataset):
     """
 
     :param name:
@@ -94,7 +94,13 @@ def run(cmd, timeout_sec):
     return stdout, stderr
 
 
-def parallel_fit(name, dataset, gamma, sF, K, save_output=False, timeout_sec=900):
+def parallel_fit(name,
+                 dataset,
+                 gamma=1.0,
+                 sF=0.5,
+                 K=5,
+                 save_output=False,
+                 timeout_sec=900):
     """
 
     :param name:
