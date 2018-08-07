@@ -170,6 +170,12 @@ def main():
                         default=False,
                         action='store_true')
 
+    parser.add_argument('--reactome',
+                        help='Uses Reactome gene sets',
+                        dest='reactome',
+                        default=False,
+                        action='store_true')
+
     parser.add_argument('--treehouse',
                         help='Uses Treehouse gene sets',
                         dest='treehouse',
@@ -231,6 +237,9 @@ def main():
 
         if args.msigdb:
             dirs = ['msigdb'] + dirs
+
+        if args.reactome:
+            dirs = ['reactome'] + dirs
 
         if args.hallmark:
             dirs = ['hallmark'] + dirs
