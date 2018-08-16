@@ -24,6 +24,7 @@ def get_genesets(dirs):
     :rtype: list
     """
     pths = []
+    gs_map = {}
     for d in dirs:
         logging.info("Pulling %s gene sets:" % d)
         gs_dir = os.path.join(src, 'gene-sets', d)
@@ -32,18 +33,27 @@ def get_genesets(dirs):
             logging.info("\t%s" % s)
             gs_pth = os.path.join(gs_dir, s)
             pths.append(gs_pth)
+            gs_map[s] =  d
 
-    return pths
+    return pths, gs_map
 
 
 def get_test_genesets():
     d = os.path.join(src, 'test', 'gene-sets')
     sets = os.listdir(d)
     logging.info("Available Gene Sets:")
+
     for s in sets:
         logging.info(s)
-    sets = [os.path.join(d, s) for s in sets]
-    return sets
+
+    pths = []
+    gs_map  = {}
+    for s in sets:
+        gs_map[s] = 'test'
+        pth =  os.path.join(d, s)
+        pths.append(pth)
+
+    return pths, gs_map
 
 
 def read_genesets(sets):
@@ -151,7 +161,8 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument('-e', '--expression',
-                        help='Gene symbol by sample matrix.\nDo not center the data.')
+                        help='Gene symbol by sample matrix.\nDo not center the data.',
+                        required=True)
 
     parser.add_argument('--CPU',
                         dest='CPU',
@@ -230,7 +241,7 @@ def main():
 
     # Determine which gene sets are included.
     if args.debug:
-        sets = get_test_genesets()
+        sets, gs_map = get_test_genesets()
 
     else:
         dirs = ['misc']
@@ -250,7 +261,7 @@ def main():
         if args.immune:
             dirs = ['immune'] + dirs
 
-        sets = get_genesets(dirs)
+        sets, gs_map = get_genesets(dirs)
 
         if len(sets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
@@ -293,8 +304,10 @@ def main():
             logging.info("Skipping {gs} because there are not enough genes".format(gs=gs))
             continue
 
+        gs_root = gs_map[gs]
+
         # Make directory for output
-        gsdir = os.path.join(args.output_dir, gs)
+        gsdir = os.path.join(args.output_dir, gs_root, gs)
         mkdir_p(gsdir)
 
         # Center data to make inference easier
