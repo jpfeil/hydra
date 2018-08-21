@@ -47,7 +47,6 @@ def fit_model(name, dataset):
     sF = 0.5                 # Prior covariance matrix is Identity * sF
     K = 5                    # Numver of initial clusters
 
-
     workdir = tempfile.mkdtemp(prefix=name)
     outputdir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
                                                                                            G=gamma,

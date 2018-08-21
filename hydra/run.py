@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 
 from collections import defaultdict
+from scipy.stats import kruskal
 
 from library.utils import mkdir_p, parallel_fit
 from library.notebook import create_notebook
@@ -68,8 +69,53 @@ def read_genesets(sets):
     return gs
 
 
+def distinct_covariates(data, model, alpha=0.01):
+    """
+    Determine if clustering separates data by components
+
+    :param data:
+    :param model:
+    :return:
+    """
+    LP = model.calc_local_params(data)
+    asnmts = LP['resp'].argmax(axis=1)
+
+    exp_groups = [[] for _ in range(max(asnmts))]
+    cov_groups = [[] for _ in range(max(asnmts))]
+
+    exp = data.X[:, 0]
+    cov = data.X[:, 1]
+
+    for e, c, a in zip(exp, cov, asnmts):
+        exp_groups[a].append(e)
+        cov_groups[a].append(c)
+
+    found_exp = False
+    found_cov = False
+
+    _, exp_p = kruskal(*exp_groups, nan_policy='raise')
+
+    if exp_p < alpha:
+        found_exp = True
+
+    _, cov_p = kruskal(*cov_groups, nan_policy='raise')
+    if cov_p < alpha:
+        found_cov = True
+
+    return found_exp and found_cov
+
+
 analyzed = {}
-def is_multimodal(name, data, min_prob_filter=None):
+def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=False):
+    """
+    This function determines if there is a multimodal pattern in the data
+
+    :param name:
+    :param data:
+    :param covariate:
+    :param min_prob_filter:
+    :return:
+    """
     if name in analyzed:
         return analyzed[name]
 
@@ -78,21 +124,38 @@ def is_multimodal(name, data, min_prob_filter=None):
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
+
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
         analyzed[name] = (name, False)
         return name, False
 
     elif len(probs) > 1:
-        analyzed[name] = (name, True)
-        return name, True
+        result = True
+
+        # Make sure gene is multimodal with respect to covariate
+        if covariate is not None:
+            assert X.dim == 2, 'Covariate data is not two dimensional'
+            result = distinct_covariates(X, model)
+
+        # Save genes for future analysis
+        if result is True and output_dir:
+            _dir = os.path.join(output_dir, 'MultiModalGenes', name)
+            mkdir_p(_dir)
+            bnpy.ioutil.ModelWriter.save_model(model,
+                                               _dir,
+                                               prefix=name)
+
+        analyzed[name] = (name, result)
+
+        return name, result
 
     else:
         analyzed[name] = (name, False)
         return name, False
 
 
-def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=None):
+def filter_geneset(lst, matrx, covariate=None, CPU=1, gene_mean_filter=None, min_prob_filter=None, output_dir=False):
     """
 
     :param lst: List of genes
@@ -112,7 +175,11 @@ def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=Non
 
         data = data - mean
         data = data.reshape(len(data), 1)
-        res = pool.apply_async(is_multimodal, args=(gene, data, min_prob_filter,))
+
+        if covariate is not None:
+            data = np.hstack((data, covariate))
+
+        res = pool.apply_async(is_multimodal, args=(gene, data, covariate, min_prob_filter, output_dir,))
         results.append(res)
 
     output = [x.get() for x in results]
@@ -164,6 +231,10 @@ def main():
                         help='Gene symbol by sample matrix.\nDo not center the data.',
                         required=True)
 
+    parser.add_argument('-c', '--covariate',
+                        help='sample X covariate matrix.',
+                        required=False)
+
     parser.add_argument('--CPU',
                         dest='CPU',
                         type=int,
@@ -196,6 +267,12 @@ def main():
     parser.add_argument('--immune',
                         help='Uses curated immune gene sets',
                         dest='immune',
+                        default=False,
+                        action='store_true')
+
+    parser.add_argument('--save-genes',
+                        help='Saves multimodal gene fits',
+                        dest='save_genes',
                         default=False,
                         action='store_true')
 
@@ -286,15 +363,30 @@ def main():
     if args.min_prob_filter is not None:
         logging.info("Minimum component probability: %0.2f" % args.min_prob_filter)
 
+    if args.covariate is not None:
+        logging.info("Reading in covariate:\n%s" % args.covariate)
+        covariate = pd.read_csv(args.covariate,
+                                sep='\t',
+                                header=None,
+                                index_col=0)
+
+        covariate = covariate.reindex(matrx.columns).dropna().values
+
+        # Center the covariate data
+        covariate = covariate - np.mean(covariate)
+        covariate.shape = (len(covariate), 1)
+
     filtered_genesets = defaultdict(set)
     for gs, genes in genesets.items():
 
         start = len(genes)
         filtered_genesets[gs] = filter_geneset(list(genes),
                                                matrx,
+                                               covariate=covariate,
                                                CPU=args.CPU,
                                                gene_mean_filter=args.min_mean_filter,
-                                               min_prob_filter=args.min_prob_filter)
+                                               min_prob_filter=args.min_prob_filter,
+                                               output_dir=args.output_dir)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
