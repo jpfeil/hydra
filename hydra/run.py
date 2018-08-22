@@ -80,8 +80,8 @@ def distinct_covariates(data, model, alpha=0.01):
     LP = model.calc_local_params(data)
     asnmts = LP['resp'].argmax(axis=1)
 
-    exp_groups = [[] for _ in range(max(asnmts))]
-    cov_groups = [[] for _ in range(max(asnmts))]
+    exp_groups = [[] for _ in range(max(asnmts) + 1)]
+    cov_groups = [[] for _ in range(max(asnmts) + 1)]
 
     exp = data.X[:, 0]
     cov = data.X[:, 1]
@@ -95,11 +95,11 @@ def distinct_covariates(data, model, alpha=0.01):
 
     _, exp_p = kruskal(*exp_groups, nan_policy='raise')
 
-    if exp_p < alpha:
+    if exp_p < alpha / (max(asnmts) + 1.0):
         found_exp = True
 
     _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-    if cov_p < alpha:
+    if cov_p < alpha / (max(asnmts) + 1.0):
         found_cov = True
 
     return found_exp and found_cov
@@ -124,7 +124,6 @@ def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=F
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
-
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
         analyzed[name] = (name, False)
@@ -145,9 +144,7 @@ def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=F
             bnpy.ioutil.ModelWriter.save_model(model,
                                                _dir,
                                                prefix=name)
-
         analyzed[name] = (name, result)
-
         return name, result
 
     else:
@@ -178,11 +175,18 @@ def filter_geneset(lst, matrx, covariate=None, CPU=1, gene_mean_filter=None, min
 
         if covariate is not None:
             data = np.hstack((data, covariate))
+            data = data.reshape(len(data), 2)
+
+        #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
+
+        #print res
 
         res = pool.apply_async(is_multimodal, args=(gene, data, covariate, min_prob_filter, output_dir,))
         results.append(res)
 
     output = [x.get() for x in results]
+
+    print output
 
     # Remove duplicate genes
     return list(set([x[0] for x in output if x[1] is True]))
@@ -270,6 +274,12 @@ def main():
                         default=False,
                         action='store_true')
 
+    parser.add_argument('--all-genes',
+                        help='Uses all genes in expression matrix',
+                        dest='all_genes',
+                        default=False,
+                        action='store_true')
+
     parser.add_argument('--save-genes',
                         help='Saves multimodal gene fits',
                         dest='save_genes',
@@ -316,9 +326,21 @@ def main():
     for key, value in vars(args).items():
         logging.info('\t%s: %s' % (key, value))
 
+    matrx = pd.read_csv(args.expression,
+                        sep='\t',
+                        index_col=0)
+
+    # Remove duplicates in index
+    matrx = matrx[~matrx.index.duplicated(keep='first')]
+
     # Determine which gene sets are included.
     if args.debug:
         sets, gs_map = get_test_genesets()
+    	genesets = read_genesets(sets)
+
+    elif args.all_genes:
+        gs_map = {'ALL_GENES': 'ALL_GENES' }
+        genesets = {'ALL_GENES': set(matrx.index.values)}
 
     else:
         dirs = ['misc']
@@ -343,14 +365,8 @@ def main():
         if len(sets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
 
-    genesets = read_genesets(sets)
+    	genesets = read_genesets(sets)
 
-    matrx = pd.read_csv(args.expression,
-                        sep='\t',
-                        index_col=0)
-
-    # Remove duplicates in index
-    matrx = matrx[~matrx.index.duplicated(keep='first')]
 
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
@@ -370,9 +386,11 @@ def main():
                                 header=None,
                                 index_col=0)
 
-        covariate = covariate.reindex(matrx.columns).dropna().values
+        covariate = covariate.reindex(matrx.columns).dropna()
+        matrx = matrx.reindex(covariate.index, axis='columns').dropna()
 
         # Center the covariate data
+        covariate = covariate.values
         covariate = covariate - np.mean(covariate)
         covariate.shape = (len(covariate), 1)
 
