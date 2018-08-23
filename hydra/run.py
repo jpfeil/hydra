@@ -177,6 +177,7 @@ def filter_geneset(lst,
         if mean < gene_mean_filter:
             continue
 
+        # Center the data
         data = data - mean
         data = data.reshape(len(data), 1)
 
@@ -184,8 +185,8 @@ def filter_geneset(lst,
             data = np.hstack((data, covariate))
             data = data.reshape(len(data), 2)
 
+        # For debugging:
         #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
-
         #print res
 
         res = pool.apply_async(is_multimodal, args=(gene,
@@ -414,10 +415,12 @@ def main():
     variants = None
     filtered_variants = None
     if args.variants is not None:
+        logging.info("Reading in variants:\n%s" % args.variants)
         variants = pd.read_csv(args.variants, sep='\t', index_col=0)
 
         filtered_variants = filter_geneset(list(variants.index),
                                            variants,
+                                           covariate=covariate,
                                            CPU=args.CPU,
                                            output_dir=args.output_dir,
                                            save_genes=args.save_genes)
