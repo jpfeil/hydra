@@ -199,8 +199,6 @@ def filter_geneset(lst,
 
     output = [x.get() for x in results]
 
-    print output
-
     # Remove duplicate genes
     return list(set([x[0] for x in output if x[1] is True]))
 
@@ -416,7 +414,8 @@ def main():
     if args.variants is not None:
         logging.info("Reading in variants:\n%s" % args.variants)
         variants = pd.read_csv(args.variants, sep='\t', index_col=0)
-        variants = variants.reindex(matrx.columns)
+        logging.info("Subsetting variants to covariate samples: %d" % len(matrx.columns))
+        variants = variants.reindex(matrx.columns, axis='columns').dropna()
 
         filtered_variants = filter_geneset(list(variants.index),
                                            variants,
