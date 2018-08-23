@@ -106,7 +106,7 @@ def distinct_covariates(data, model, alpha=0.01):
 
 
 analyzed = {}
-def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=False):
+def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=None, save_genes=False):
     """
     This function determines if there is a multimodal pattern in the data
 
@@ -138,7 +138,7 @@ def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=F
             result = distinct_covariates(X, model)
 
         # Save genes for future analysis
-        if result is True and output_dir:
+        if result is True and output_dir and save_genes:
             _dir = os.path.join(output_dir, 'MultiModalGenes', name)
             mkdir_p(_dir)
             bnpy.ioutil.ModelWriter.save_model(model,
@@ -152,7 +152,14 @@ def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=F
         return name, False
 
 
-def filter_geneset(lst, matrx, covariate=None, CPU=1, gene_mean_filter=None, min_prob_filter=None, output_dir=False):
+def filter_geneset(lst,
+                   matrx,
+                   covariate=None,
+                   CPU=1,
+                   gene_mean_filter=None,
+                   min_prob_filter=None,
+                   output_dir=None,
+                   save_genes=False):
     """
 
     :param lst: List of genes
@@ -181,7 +188,12 @@ def filter_geneset(lst, matrx, covariate=None, CPU=1, gene_mean_filter=None, min
 
         #print res
 
-        res = pool.apply_async(is_multimodal, args=(gene, data, covariate, min_prob_filter, output_dir,))
+        res = pool.apply_async(is_multimodal, args=(gene,
+                                                    data,
+                                                    covariate,
+                                                    min_prob_filter,
+                                                    output_dir,
+                                                    save_genes,))
         results.append(res)
 
     output = [x.get() for x in results]
@@ -234,6 +246,10 @@ def main():
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
                         required=True)
+
+    parser.add_argument('-v', '--variants',
+                        help='Variant identifier by sample matrix.\nName must be distinct from expression.',
+                        required=False)
 
     parser.add_argument('-c', '--covariate',
                         help='sample X covariate matrix.',
@@ -336,7 +352,7 @@ def main():
     # Determine which gene sets are included.
     if args.debug:
         sets, gs_map = get_test_genesets()
-    	genesets = read_genesets(sets)
+        genesets = read_genesets(sets)
 
     elif args.all_genes:
         gs_map = {'ALL_GENES': 'ALL_GENES' }
@@ -365,7 +381,7 @@ def main():
         if len(sets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
 
-    	genesets = read_genesets(sets)
+        genesets = read_genesets(sets)
 
 
     # Find overlap in alias space
@@ -379,6 +395,7 @@ def main():
     if args.min_prob_filter is not None:
         logging.info("Minimum component probability: %0.2f" % args.min_prob_filter)
 
+    covariate = None
     if args.covariate is not None:
         logging.info("Reading in covariate:\n%s" % args.covariate)
         covariate = pd.read_csv(args.covariate,
@@ -394,6 +411,21 @@ def main():
         covariate = covariate - np.mean(covariate)
         covariate.shape = (len(covariate), 1)
 
+    variants = None
+    filtered_variants = None
+    if args.variants is not None:
+        variants = pd.read_csv(args.variants, sep='\t', index_col=0)
+
+        filtered_variants = filter_geneset(list(variants.index),
+                                           variants,
+                                           CPU=args.CPU,
+                                           output_dir=args.output_dir,
+                                           save_genes=args.save_genes)
+
+        logging.info("Filtering variants: went from {x} to {y} variants".format(x=len(variants),
+                                                                                y=len(filtered_variants)))
+
+
     filtered_genesets = defaultdict(set)
     for gs, genes in genesets.items():
 
@@ -404,7 +436,8 @@ def main():
                                                CPU=args.CPU,
                                                gene_mean_filter=args.min_mean_filter,
                                                min_prob_filter=args.min_prob_filter,
-                                               output_dir=args.output_dir)
+                                               output_dir=args.output_dir,
+                                               save_genes=args.save_genes)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
@@ -420,15 +453,23 @@ def main():
         gsdir = os.path.join(args.output_dir, gs_root, gs)
         mkdir_p(gsdir)
 
+        # Create training data for the model fit
+        training = matrx.loc[filtered_genesets[gs], :]
+
+        if filtered_variants is not None:
+            training = pd.concat([training, variants.reindex(filtered_variants)],
+                                 axis=0,
+                                 verify_integrity=True)
+
+        # Save the expression data for future analysis
+        pth = os.path.join(gsdir, 'training-data.tsv')
+        training.to_csv(pth, sep='\t')
+
         # Center data to make inference easier
-        center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean(), axis=1)
+        center = training.apply(lambda x: x - x.mean(), axis=1)
 
         # Trying to figure out where the duplicate index is coming from
         center = center[~center.index.duplicated(keep='first')]
-
-        # Save the expression data for future analysis
-        pth = os.path.join(gsdir, 'expression.tsv')
-        matrx.loc[filtered_genesets[gs]].to_csv(pth, sep='\t')
 
         # Need to take the transpose
         # Samples x Genes
