@@ -401,10 +401,12 @@ def main():
                                 header=None,
                                 index_col=0)
 
+        logging.info("Taking intersection of expression and covariate data")
         covariate = covariate.reindex(matrx.columns).dropna()
         matrx = matrx.reindex(covariate.index, axis='columns').dropna()
 
         # Center the covariate data
+        logging.info("Centering covariate data")
         covariate = covariate.values
         covariate = covariate - np.mean(covariate)
         covariate.shape = (len(covariate), 1)
@@ -480,7 +482,7 @@ def main():
         # Create dataset object for inference
         dataset = bnpy.data.XData(data)
 
-        gamma = 1.0
+        gamma = 5.0
         sF = 0.5
         K = 5
 
