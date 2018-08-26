@@ -43,7 +43,7 @@ def fit_model(name, dataset):
     :param dataset: bnpy.data.XData object
     :return:
     """
-    gamma = 1.0              # Prior on dirichlet dispersion parameter
+    gamma = 5.0              # Prior on dirichlet dispersion parameter
     sF = 0.5                 # Prior covariance matrix is Identity * sF
     K = 5                    # Numver of initial clusters
 
