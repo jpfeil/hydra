@@ -10,82 +10,35 @@ import pandas as pd
 from collections import defaultdict
 from scipy.stats import kruskal
 
-from library.utils import mkdir_p, parallel_fit
+from library.fit import subprocess_fit
+from library.utils import mkdir_p, get_genesets, get_test_genesets, read_genesets
 from library.notebook import create_notebook
+
 
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def get_genesets(dirs):
-    """
-    Formats the paths to the gene set files
-
-    :param list dirs: Gene set directories
-    :return: Path to gene set files
-    :rtype: list
-    """
-    pths = []
-    gs_map = {}
-    for d in dirs:
-        logging.info("Pulling %s gene sets:" % d)
-        gs_dir = os.path.join(src, 'gene-sets', d)
-        gss = os.listdir(gs_dir)
-        for s in gss:
-            logging.info("\t%s" % s)
-            gs_pth = os.path.join(gs_dir, s)
-            pths.append(gs_pth)
-            gs_map[s] =  d
-
-    return pths, gs_map
-
-
-def get_test_genesets():
-    d = os.path.join(src, 'test', 'gene-sets')
-    sets = os.listdir(d)
-    logging.info("Available Gene Sets:")
-
-    for s in sets:
-        logging.info(s)
-
-    pths = []
-    gs_map  = {}
-    for s in sets:
-        gs_map[s] = 'test'
-        pth =  os.path.join(d, s)
-        pths.append(pth)
-
-    return pths, gs_map
-
-
-def read_genesets(sets):
-    gs = defaultdict(set)
-
-    for s in sets:
-        name = os.path.basename(s)
-        with open(s) as f:
-            for line in f:
-                gene = line.strip()
-                gs[name].add(gene)
-    return gs
-
-
 def distinct_covariates(data, model, alpha=0.01):
     """
-    Determine if clustering separates data by components
+    Determine if clustering separates data into statistically different components
 
-    :param data:
-    :param model:
-    :return:
+    :param data: XData object
+    :param model: bnpy model
     """
+
+    # Fit the data again to determine the assignments
     LP = model.calc_local_params(data)
     asnmts = LP['resp'].argmax(axis=1)
 
+    # Create a separate group for each assignment
     exp_groups = [[] for _ in range(max(asnmts) + 1)]
     cov_groups = [[] for _ in range(max(asnmts) + 1)]
 
+    # Separate the expression and the component variables
     exp = data.X[:, 0]
     cov = data.X[:, 1]
 
+    # Add data to the appropriate elements in the list
     for e, c, a in zip(exp, cov, asnmts):
         exp_groups[a].append(e)
         cov_groups[a].append(c)
@@ -93,34 +46,57 @@ def distinct_covariates(data, model, alpha=0.01):
     found_exp = False
     found_cov = False
 
+    # Determine if the expression data is statistically
+    # different by a non-parametric test
     _, exp_p = kruskal(*exp_groups, nan_policy='raise')
-
-    if exp_p < alpha / (max(asnmts) + 1.0):
+    if exp_p < alpha:
         found_exp = True
 
+    # Determine if the covariate data is statistically
+    # different by a non-parametric test
     _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-    if cov_p < alpha / (max(asnmts) + 1.0):
+    if cov_p < alpha:
         found_cov = True
 
     return found_exp and found_cov
 
 
+# Global variable for keeping track of multimodally expressed genes
 analyzed = {}
-def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=None, save_genes=False):
-    """
-    This function determines if there is a multimodal pattern in the data
 
-    :param name:
-    :param data:
-    :param covariate:
-    :param min_prob_filter:
+
+def is_multimodal(name,
+                  data,
+                  covariate=None,
+                  min_prob_filter=None,
+                  output_dir=None,
+                  save_genes=False,
+                  alpha=0.01):
+    """
+    This function determines if there is a multimodal pattern in the data. Also has a bunch of other
+    functions that should be factored out. For example, this function also skips genes that do not
+    pass the minimum probability filter.
+
+    :param name: gene name
+    :param data: expression data
+    :param covariate: covariate data
+    :param min_prob_filter: minimium probability filter
+    :param output_dir: path to output directory
+    :param save_genes: whether to save the gene fit
+    :param alpha: significance threshold
     :return:
     """
+
+    # If we have analyzed this sample before,
+    # then just take that value and save some time
     if name in analyzed:
         return analyzed[name]
 
+    # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
-    model = parallel_fit(name, X)
+
+    # Run the parallel fit model
+    model = subprocess_fit(name, X)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
@@ -135,7 +111,7 @@ def is_multimodal(name, data, covariate=None, min_prob_filter=None, output_dir=N
         # Make sure gene is multimodal with respect to covariate
         if covariate is not None:
             assert X.dim == 2, 'Covariate data is not two dimensional'
-            result = distinct_covariates(X, model)
+            result = distinct_covariates(X, model, alpha=alpha)
 
         # Save genes for future analysis
         if result is True and output_dir and save_genes:
@@ -180,6 +156,10 @@ def filter_geneset(lst,
     """
     pool = multiprocessing.Pool(processes=CPU)
 
+    # Set the alpha for determining
+    # statistically significant covariate genes
+    alpha = 0.01 / len(lst)
+
     results = []
     for gene in lst:
         data = matrx.loc[gene, :].values
@@ -208,17 +188,19 @@ def filter_geneset(lst,
         #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
         #print res
 
+        # Determine if gene and covariate is multimodal
         res = pool.apply_async(is_multimodal, args=(gene,
                                                     data,
                                                     covariate,
                                                     min_prob_filter,
                                                     output_dir,
-                                                    save_genes,))
+                                                    save_genes,
+                                                    alpha,))
         results.append(res)
 
     output = [x.get() for x in results]
 
-    # Remove duplicate genes
+    # Select multimodal genes
     return list(set([x[0] for x in output if x[1] is True]))
 
 
@@ -466,7 +448,7 @@ def main():
         logging.info("Filtering variants: went from {x} to {y} variants".format(x=len(variants),
                                                                                 y=len(filtered_variants)))
 
-
+    # Iterate over the gene sets and select for multimodally expressed genes
     filtered_genesets = defaultdict(set)
     for gs, genes in genesets.items():
 
@@ -498,6 +480,7 @@ def main():
         training = matrx.loc[filtered_genesets[gs], :]
 
         if filtered_variants is not None:
+            logging.info("Concat training data and variant data...")
             training = pd.concat([training, variants.reindex(filtered_variants)],
                                  axis=0,
                                  verify_integrity=True)
@@ -508,9 +491,6 @@ def main():
 
         # Center data to make inference easier
         center = training.apply(lambda x: x - x.mean(), axis=1)
-
-        # Trying to figure out where the duplicate index is coming from
-        center = center[~center.index.duplicated(keep='first')]
 
         # Need to take the transpose
         # Samples x Genes
@@ -526,7 +506,7 @@ def main():
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
 
         # Fit multivariate model
-        hmodel = parallel_fit(gs, dataset, gamma, sF, K, save_output=args.debug)
+        hmodel = subprocess_fit(gs, dataset, gamma, sF, K, save_output=args.debug)
 
         # Get the sample assignments
         LP = hmodel.calc_local_params(dataset)
