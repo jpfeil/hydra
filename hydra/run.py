@@ -161,9 +161,21 @@ def filter_geneset(lst,
                    output_dir=None,
                    save_genes=False):
     """
+    Applies non-parametric mixture model to expression data. Can optionally add
+    a covariate (e.g. survival, IC50) to select genes that vary with a variable of
+    interest.
 
-    :param lst: List of genes
-    :param matrx: Expression dataframe
+    Loops over a list of genes and selects rows in the expression matrix. Creates
+    a bivariate data set for analyzing genes that covary with a variable of interest.
+
+    :param lst (list): list of genes
+    :param matrx (pd.DataFrame): expression dataframe
+    :param covariate (np.array): covariate vector
+    :param CPU (int): number of CPUs available
+    :param gene_mean_filter (float): mean threshold for filtering genes
+    :param min_prob_filter (float): min probability threshold for filtering genes
+    :param output_dir (str): path to output directory for saving intermediate files
+    :param save_genes (bool): flag for deciding whether or not to save the gene models
     :return:
     """
     pool = multiprocessing.Pool(processes=CPU)
@@ -177,10 +189,17 @@ def filter_geneset(lst,
         if mean < gene_mean_filter:
             continue
 
-        # Center the data
+        # Center the expression data. This data should not be
+        # centered before this step
         data = data - mean
+
+        # Reshape the data so that it is compatible with the
+        # mixture model
         data = data.reshape(len(data), 1)
 
+        # Append the covariate if there is a covariate. The
+        # covariate should be in the same order as the expression
+        # data.
         if covariate is not None:
             data = np.hstack((data, covariate))
             data = data.reshape(len(data), 2)
@@ -198,8 +217,6 @@ def filter_geneset(lst,
         results.append(res)
 
     output = [x.get() for x in results]
-
-    print output
 
     # Remove duplicate genes
     return list(set([x[0] for x in output if x[1] is True]))
@@ -240,7 +257,11 @@ def find_aliases(gss, mapper, index):
 
 def main():
     """
-    Fits one, two, and three component mixture models and returns fit information in output dir.
+    Fits non-parametric mixture models to expression data. Can add a covariate to filter
+    genes that are differentially expressed with respect to another continuous variable.
+    Finally, there is support for variants, but the variants must be in a format that
+    is similar to expression data. One can sample from a normal distribution to introduce
+    noise to the variant status.
     """
     parser = argparse.ArgumentParser(description=main.__doc__)
 
@@ -330,8 +351,10 @@ def main():
 
     args = parser.parse_args()
 
+    # Make the output directory if it doesn't already exist
     mkdir_p(args.output_dir)
 
+    # Start logging
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
                         level=logging.INFO)
 
@@ -343,19 +366,26 @@ def main():
     for key, value in vars(args).items():
         logging.info('\t%s: %s' % (key, value))
 
+    # Read in expression data
+    logging.info("Reading in expression data:\n%s" % args.expression)
     matrx = pd.read_csv(args.expression,
                         sep='\t',
                         index_col=0)
 
     # Remove duplicates in index
+    logging.info("Removing duplicate genes:")
+    logging.info("Started with: %d" % len(matrx))
     matrx = matrx[~matrx.index.duplicated(keep='first')]
+    logging.info("Ended with: %d" % len(matrx))
 
     # Determine which gene sets are included.
     if args.debug:
+        logging.info("Loading debug gene sets...")
         sets, gs_map = get_test_genesets()
         genesets = read_genesets(sets)
 
     elif args.all_genes:
+        logging.info("Creating ALL_GENES gene set...")
         gs_map = {'ALL_GENES': 'ALL_GENES' }
         genesets = {'ALL_GENES': set(matrx.index.values)}
 
@@ -387,6 +417,7 @@ def main():
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
     alias_mapper = pd.read_csv(pth, sep='\t')
+    logging.info("Looking for gene aliases...")
     genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
     if args.min_mean_filter is not None:
@@ -404,8 +435,12 @@ def main():
                                 index_col=0)
 
         logging.info("Taking intersection of expression and covariate data")
-        covariate = covariate.reindex(matrx.columns).dropna()
-        matrx = matrx.reindex(covariate.index, axis='columns').dropna()
+        logging.info("Started with: %d" % len(matrx.columns))
+        _intersection = [x for x in covariate.index if x in matrx.columns]
+        assert len(_intersection) > 0
+        covariate = covariate.reindex(_intersection).dropna()
+        matrx = matrx.reindex(_intersection, axis='columns').dropna()
+        logging.info("Ended with: %d" % len(matrx.columns))
 
         # Center the covariate data
         logging.info("Centering covariate data")
