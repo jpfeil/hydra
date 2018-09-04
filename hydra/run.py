@@ -453,7 +453,8 @@ def main():
     if args.variants is not None:
         logging.info("Reading in variants:\n%s" % args.variants)
         variants = pd.read_csv(args.variants, sep='\t', index_col=0)
-        variants = variants.reindex(matrx.columns)
+        logging.info("Subsetting variants to covariate samples: %d" % len(matrx.columns))
+        variants = variants.reindex(matrx.columns, axis='columns').dropna()
 
         filtered_variants = filter_geneset(list(variants.index),
                                            variants,
