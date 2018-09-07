@@ -71,6 +71,7 @@ def run(cmd, timeout_sec):
         stdout, stderr = proc.communicate()
 
     finally:
+        print("Killed process!")
         timer.cancel()
 
     return stdout, stderr
@@ -95,7 +96,7 @@ def subprocess_fit(name,
     :return:
     """
 
-    workdir = tempfile.mkdtemp(prefix=name)
+    workdir = tempfile.mkdtemp(prefix="%s_" % name)
     output_dir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
                                                                                             G=gamma,
                                                                                             Cov=sF)

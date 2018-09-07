@@ -160,9 +160,18 @@ def filter_geneset(lst,
     # statistically significant covariate genes
     alpha = 0.01 / len(lst)
 
+    if covariate:
+        samples = [x for x in covariate.index if x in matrx.columns]
+        if len(samples) == 0:
+            raise ValueError("Covariate and expression data do not overlap!")
+        covariate = covariate.reindex(samples).dropna()
+
+    else:
+        samples = matrx.columns
+
     results = []
     for gene in lst:
-        data = matrx.loc[gene, :].values
+        data = matrx.loc[gene, samples].values
         mean = np.mean(data)
 
         # Skip Genes that have a mean below the mean filter
@@ -416,13 +425,7 @@ def main():
                                 header=None,
                                 index_col=0)
 
-        logging.info("Taking intersection of expression and covariate data")
-        logging.info("Started with: %d" % len(matrx.columns))
-        _intersection = [x for x in covariate.index if x in matrx.columns]
-        assert len(_intersection) > 0
-        covariate = covariate.reindex(_intersection).dropna()
-        matrx = matrx.reindex(_intersection, axis='columns').dropna()
-        logging.info("Ended with: %d" % len(matrx.columns))
+        covariate = covariate.reindex(matrx.columns).dropna()
 
         # Center the covariate data
         logging.info("Centering covariate data")
