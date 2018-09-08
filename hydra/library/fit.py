@@ -71,7 +71,6 @@ def run(cmd, timeout_sec):
         stdout, stderr = proc.communicate()
 
     finally:
-        print("Killed process!")
         timer.cancel()
 
     return stdout, stderr
@@ -125,7 +124,7 @@ def subprocess_fit(name,
                      sF=sF,
                      output=output_path)
 
-    stdout, stderr = run(cmd, timeout_sec=timeout_sec)
+    run(cmd, timeout_sec=timeout_sec)
 
     hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
                                                           prefix='Best')

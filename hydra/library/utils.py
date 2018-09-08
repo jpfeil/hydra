@@ -1,12 +1,10 @@
 import logging
 import errno
 import os
-import sys
 
 from collections import defaultdict
 
 
-src = os.path.dirname(os.path.abspath(__file__))
 
 def mkdir_p(path):
     """
@@ -22,8 +20,6 @@ def mkdir_p(path):
             pass
         else:
             raise
-
-
 
 
 def get_genesets(dirs):
@@ -49,7 +45,7 @@ def get_genesets(dirs):
     return pths, gs_map
 
 
-def get_test_genesets():
+def get_test_genesets(src):
     d = os.path.join(src, 'test', 'gene-sets')
     sets = os.listdir(d)
     logging.info("Available Gene Sets:")

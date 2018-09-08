@@ -345,7 +345,7 @@ def main():
     # Determine which gene sets are included.
     if args.debug:
         logging.info("Loading debug gene sets...")
-        sets, gs_map = get_test_genesets()
+        sets, gs_map = get_test_genesets(src)
         genesets = read_genesets(sets)
 
     elif args.all_genes:
