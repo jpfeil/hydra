@@ -18,12 +18,13 @@ from library.notebook import create_notebook
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def distinct_covariates(data, model, alpha=0.01):
+def distinct_covariates(data, model, covariate, alpha=0.01):
     """
     Determine if clustering separates data into statistically different components
 
     :param data: XData object
     :param model: bnpy model
+    :param covariate: numpy array in the same order as the data object
     """
 
     # Fit the data again to determine the assignments
@@ -31,34 +32,23 @@ def distinct_covariates(data, model, alpha=0.01):
     asnmts = LP['resp'].argmax(axis=1)
 
     # Create a separate group for each assignment
-    exp_groups = [[] for _ in range(max(asnmts) + 1)]
     cov_groups = [[] for _ in range(max(asnmts) + 1)]
 
-    # Separate the expression and the component variables
-    exp = data.X[:, 0]
-    cov = data.X[:, 1]
-
     # Add data to the appropriate elements in the list
-    for e, c, a in zip(exp, cov, asnmts):
-        exp_groups[a].append(e)
+    for c, a in zip(covariate, asnmts):
+        if pd.isnull(c):
+            continue
+
         cov_groups[a].append(c)
 
-    found_exp = False
     found_cov = False
-
-    # Determine if the expression data is statistically
-    # different by a non-parametric test
-    _, exp_p = kruskal(*exp_groups, nan_policy='raise')
-    if exp_p < alpha:
-        found_exp = True
-
     # Determine if the covariate data is statistically
     # different by a non-parametric test
     _, cov_p = kruskal(*cov_groups, nan_policy='raise')
     if cov_p < alpha:
         found_cov = True
 
-    return found_exp and found_cov
+    return found_cov
 
 
 # Global variable for keeping track of multimodally expressed genes
@@ -110,8 +100,7 @@ def is_multimodal(name,
 
         # Make sure gene is multimodal with respect to covariate
         if covariate is not None:
-            assert X.dim == 2, 'Covariate data is not two dimensional'
-            result = distinct_covariates(X, model, alpha=alpha)
+            result = distinct_covariates(X, model, covariate, alpha=alpha)
 
         # Save genes for future analysis
         if result is True and output_dir and save_genes:
@@ -160,18 +149,9 @@ def filter_geneset(lst,
     # statistically significant covariate genes
     alpha = 0.01 / len(lst)
 
-    if covariate:
-        samples = [x for x in covariate.index if x in matrx.columns]
-        if len(samples) == 0:
-            raise ValueError("Covariate and expression data do not overlap!")
-        covariate = covariate.reindex(samples).dropna()
-
-    else:
-        samples = matrx.columns
-
     results = []
     for gene in lst:
-        data = matrx.loc[gene, samples].values
+        data = matrx.loc[gene, :].values
         mean = np.mean(data)
 
         # Skip Genes that have a mean below the mean filter
@@ -185,13 +165,6 @@ def filter_geneset(lst,
         # Reshape the data so that it is compatible with the
         # mixture model
         data = data.reshape(len(data), 1)
-
-        # Append the covariate if there is a covariate. The
-        # covariate should be in the same order as the expression
-        # data.
-        if covariate is not None:
-            data = np.hstack((data, covariate))
-            data = data.reshape(len(data), 2)
 
         # For debugging:
         #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
@@ -425,31 +398,7 @@ def main():
                                 header=None,
                                 index_col=0)
 
-        covariate = covariate.reindex(matrx.columns).dropna()
-
-        # Center the covariate data
-        logging.info("Centering covariate data")
-        covariate = covariate.values
-        covariate = covariate - np.mean(covariate)
-        covariate.shape = (len(covariate), 1)
-
-    variants = None
-    filtered_variants = None
-    if args.variants is not None:
-        logging.info("Reading in variants:\n%s" % args.variants)
-        variants = pd.read_csv(args.variants, sep='\t', index_col=0)
-        logging.info("Subsetting variants to covariate samples: %d" % len(matrx.columns))
-        variants = variants.reindex(matrx.columns, axis='columns').dropna()
-
-        filtered_variants = filter_geneset(list(variants.index),
-                                           variants,
-                                           covariate=covariate,
-                                           CPU=args.CPU,
-                                           output_dir=args.output_dir,
-                                           save_genes=args.save_genes)
-
-        logging.info("Filtering variants: went from {x} to {y} variants".format(x=len(variants),
-                                                                                y=len(filtered_variants)))
+        covariate = covariate.reindex(matrx.columns)
 
     # Iterate over the gene sets and select for multimodally expressed genes
     filtered_genesets = defaultdict(set)
@@ -481,12 +430,6 @@ def main():
 
         # Create training data for the model fit
         training = matrx.loc[filtered_genesets[gs], :]
-
-        if filtered_variants is not None:
-            logging.info("Concat training data and variant data...")
-            training = pd.concat([training, variants.reindex(filtered_variants)],
-                                 axis=0,
-                                 verify_integrity=True)
 
         # Save the expression data for future analysis
         pth = os.path.join(gsdir, 'training-data.tsv')
