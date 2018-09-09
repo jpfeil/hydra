@@ -39,7 +39,7 @@ def distinct_covariates(data, model, covariate, alpha=0.01):
         if pd.isnull(c):
             continue
 
-        cov_groups[a].append(c)
+        cov_groups[a].append(float(c))
 
     # Remove empty lists
     cov_groups = [x for x in cov_groups if len(x) > 0]
@@ -53,7 +53,10 @@ def distinct_covariates(data, model, covariate, alpha=0.01):
             found_cov = True
 
     except ValueError:
-        pass
+        logging.info("Kruskal-Wallis Failed")
+        print cov_groups
+        for i, g in enumerate(cov_groups):
+            print "Group: %d" % i, len(g)
 
     return found_cov
 
@@ -180,7 +183,7 @@ def filter_geneset(lst,
         # Determine if gene and covariate is multimodal
         res = pool.apply_async(is_multimodal, args=(gene,
                                                     data,
-                                                    covariate,
+                                                    covariate.values,
                                                     min_prob_filter,
                                                     output_dir,
                                                     save_genes,
@@ -410,6 +413,9 @@ def main():
                                 index_col=0)
 
         covariate = covariate.reindex(matrx.columns)
+        if args.debug:
+            pth = os.path.join(args.output_dir, 'covariate.tsv')
+            covariate.to_csv(pth, sep='\t', header=None)
 
     # Iterate over the gene sets and select for multimodally expressed genes
     filtered_genesets = defaultdict(set)
