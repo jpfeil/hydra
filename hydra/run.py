@@ -41,12 +41,19 @@ def distinct_covariates(data, model, covariate, alpha=0.01):
 
         cov_groups[a].append(c)
 
+    # Remove empty lists
+    cov_groups = [x for x in cov_groups if len(x) > 0]
+
     found_cov = False
     # Determine if the covariate data is statistically
     # different by a non-parametric test
-    _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-    if cov_p < alpha:
-        found_cov = True
+    try:
+        _, cov_p = kruskal(*cov_groups, nan_policy='raise')
+        if cov_p < alpha:
+            found_cov = True
+
+    except ValueError:
+        pass
 
     return found_cov
 
@@ -341,6 +348,10 @@ def main():
     logging.info("Started with: %d" % len(matrx))
     matrx = matrx[~matrx.index.duplicated(keep='first')]
     logging.info("Ended with: %d" % len(matrx))
+
+    for gene in matrx.index:
+        if '/' in gene:
+            raise ValueError("Gene names cannot contain forward slashes!")
 
     # Determine which gene sets are included.
     if args.debug:
