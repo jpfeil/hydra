@@ -41,8 +41,8 @@ def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
 
         cov_groups[a].append(float(c))
 
-    # Remove empty lists
-    cov_groups = [x for x in cov_groups if len(x) > 0]
+    # Remove groups with a small sample size
+    cov_groups = [x for x in cov_groups if len(x) > 5]
 
     found_cov = False
     # Determine if the covariate data is statistically

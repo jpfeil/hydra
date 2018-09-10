@@ -42,7 +42,7 @@ def fit_model(name, dataset):
                                         'Gauss',
                                         'memoVB',
                                         output_path=output_path,
-                                        nLap=100,
+                                        nLap=500,
                                         nTask=1,
                                         nBatch=1,
                                         gamma0=gamma,
@@ -110,7 +110,7 @@ def subprocess_fit(name,
                     Gauss 
                     memoVB 
                     --K {K}
-                    --nLap 100
+                    --nLap 500
                     --nTask 1
                     --nBatch 1
                     --gamma0 {G}
