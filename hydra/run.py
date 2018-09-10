@@ -46,11 +46,14 @@ def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
 
     found_cov = False
     # Determine if the covariate data is statistically
-    # different by a non-parametric test
+    # different by a non-parametric Kruskal-Wallis test
     try:
         _, cov_p = kruskal(*cov_groups, nan_policy='raise')
         if cov_p < alpha:
             found_cov = True
+
+        elif pd.isnull(cov_p):
+            raise ValueError("Kruskal-Wallis p-value is NaN")
 
     except ValueError:
         if len(cov_groups) == 1:
