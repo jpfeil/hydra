@@ -53,10 +53,8 @@ def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
             found_cov = True
 
     except ValueError:
-        logging.info("Kruskal-Wallis Failed")
-        print cov_groups
-        for i, g in enumerate(cov_groups):
-            print "Group: %d" % i, len(g)
+        if len(cov_groups) == 1:
+            logging.debug("All covariate data clustered into one group.")
 
     return found_cov
 
@@ -436,7 +434,7 @@ def main():
                                                                          x=start,
                                                                          y=end))
         if end < args.min_num_filter:
-            logging.info("Skipping {gs} because there are not enough genes".format(gs=gs))
+            logging.info("Skipping {gs} because there are not enough genes to cluster".format(gs=gs))
             continue
 
         gs_root = gs_map[gs]
