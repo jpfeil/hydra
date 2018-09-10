@@ -181,10 +181,13 @@ def filter_geneset(lst,
         #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
         #print res
 
+        if covariate is not None:
+            covariate = covariate.values
+
         # Determine if gene and covariate is multimodal
         res = pool.apply_async(is_multimodal, args=(gene,
                                                     data,
-                                                    covariate.values,
+                                                    covariate,
                                                     min_prob_filter,
                                                     output_dir,
                                                     save_genes,
