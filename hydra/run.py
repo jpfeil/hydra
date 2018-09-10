@@ -18,7 +18,7 @@ from library.notebook import create_notebook
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def distinct_covariates(data, model, covariate, alpha=0.01):
+def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
     """
     Determine if clustering separates data into statistically different components
 
@@ -96,7 +96,7 @@ def is_multimodal(name,
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model = subprocess_fit(name, X)
+    model = subprocess_fit(name, X, gamma=5.0)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
@@ -462,9 +462,15 @@ def main():
         # Create dataset object for inference
         dataset = bnpy.data.XData(data)
 
+        # Set the prior for creating a new cluster
         gamma = 5.0
-        sF = 0.5
-        K = 5
+
+        # Start with a standard identity matrix
+        sF = 1.0
+
+        # Starting with one cluster because most
+        # distributions will likely have only one cluster.
+        K = 1
 
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
 
