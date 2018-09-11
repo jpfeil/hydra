@@ -18,7 +18,7 @@ from library.notebook import create_notebook
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
+def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=False):
     """
     Determine if clustering separates data into statistically different components
 
@@ -27,48 +27,67 @@ def distinct_covariates(data, model, covariate, alpha=0.01, debug=False):
     :param covariate: numpy array in the same order as the data object
     """
 
+    if keep is None:
+        raise ValueError("Need to specify whether or not to keep gene based on covariate!")
+
+    print(keep)
+
     # Fit the data again to determine the assignments
     LP = model.calc_local_params(data)
     asnmts = LP['resp'].argmax(axis=1)
 
-    # Create a separate group for each assignment
-    cov_groups = [[] for _ in range(max(asnmts) + 1)]
+    keeps = []
+    for k, cov in zip(keep, covariate.columns):
+        print(cov, k)
 
-    # Add data to the appropriate elements in the list
-    for c, a in zip(covariate, asnmts):
-        if pd.isnull(c):
-            continue
+        # Create a separate group for each assignment
+        cov_groups = [[] for _ in range(max(asnmts) + 1)]
 
-        cov_groups[a].append(float(c))
+        # Add data to the appropriate elements in the list
+        for c, a in zip(covariate[cov], asnmts):
+            if pd.isnull(c):
+                continue
 
-    # Remove groups with a small sample size
-    cov_groups = [x for x in cov_groups if len(x) > 5]
+            cov_groups[a].append(float(c))
 
-    found_cov = False
-    # Determine if the covariate data is statistically
-    # different by a non-parametric Kruskal-Wallis test
-    try:
-        _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-        if cov_p < alpha:
-            found_cov = True
+        # Remove groups with a small sample size
+        cov_groups = [x for x in cov_groups if len(x) > 5]
 
-        elif pd.isnull(cov_p):
-            raise ValueError("Kruskal-Wallis p-value is NaN")
+        # Determine if the covariate data is statistically
+        # different by a non-parametric Kruskal-Wallis test
+        found_cov = False
+        try:
+            _, cov_p = kruskal(*cov_groups, nan_policy='raise')
+            if cov_p < alpha:
+                found_cov = True
 
-    except ValueError:
-        if len(cov_groups) == 1:
-            logging.debug("All covariate data clustered into one group.")
+            elif pd.isnull(cov_p):
+                raise ValueError("Kruskal-Wallis p-value is NaN")
 
-    return found_cov
+        except ValueError:
+            if len(cov_groups) == 1:
+                logging.debug("All covariate data clustered into one group.")
+
+        if k is True:
+            print 'keep is True', found_cov
+            keeps.append(found_cov)
+
+        elif k is False:
+            print 'keep is False', not found_cov
+            keeps.append(not found_cov)
+
+    return all(keeps)
+
 
 
 # Global variable for keeping track of multimodally expressed genes
 analyzed = {}
 
 
-def is_multimodal(name,
-                  data,
+def is_multimodal(gene,
+                  matrx,
                   covariate=None,
+                  gene_mean_filter=None,
                   min_prob_filter=None,
                   output_dir=None,
                   save_genes=False,
@@ -78,7 +97,7 @@ def is_multimodal(name,
     functions that should be factored out. For example, this function also skips genes that do not
     pass the minimum probability filter.
 
-    :param name: gene name
+    :param gene: gene name
     :param data: expression data
     :param covariate: covariate data
     :param min_prob_filter: minimium probability filter
@@ -90,42 +109,71 @@ def is_multimodal(name,
 
     # If we have analyzed this sample before,
     # then just take that value and save some time
-    if name in analyzed:
-        return analyzed[name]
+    if gene in analyzed:
+        return analyzed[gene]
+
+    data = matrx.loc[gene, :].values
+    mean = np.mean(data)
+
+    # Skip Genes that have a mean below the mean filter
+    if mean < gene_mean_filter:
+        return gene, False
+
+    # Center the expression data. This data should not be
+    # centered before this step
+    data = data - mean
+
+    # Reshape the data so that it is compatible with the
+    # mixture model
+    data = data.reshape(len(data), 1)
+
+    # For debugging:
+    #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
+    #print res
+
+    keep = None
+    if covariate is not None:
+        keep = covariate.loc['keep', :].values
+        covariate = covariate.reindex(matrx.columns)
 
     # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model = subprocess_fit(name, X, gamma=5.0)
+    model, converged = subprocess_fit(gene, X, gamma=5.0)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
+    # Do not consider genes where the model did not converge
+    if converged is False:
+        logging.info("Model did not converge for %s" % gene)
+        return gene, False
+
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
-        analyzed[name] = (name, False)
-        return name, False
+        analyzed[gene] = (gene, False)
+        return gene, False
 
     elif len(probs) > 1:
         result = True
 
         # Make sure gene is multimodal with respect to covariate
         if covariate is not None:
-            result = distinct_covariates(X, model, covariate, alpha=alpha)
+            result = distinct_covariates(X, model, covariate, keep=keep, alpha=alpha)
 
         # Save genes for future analysis
         if result is True and output_dir and save_genes:
-            _dir = os.path.join(output_dir, 'MultiModalGenes', name)
+            _dir = os.path.join(output_dir, 'MultiModalGenes', gene)
             mkdir_p(_dir)
             bnpy.ioutil.ModelWriter.save_model(model,
                                                _dir,
-                                               prefix=name)
-        analyzed[name] = (name, result)
-        return name, result
+                                               prefix=gene)
+        analyzed[gene] = (gene, result)
+        return gene, result
 
     else:
-        analyzed[name] = (name, False)
-        return name, False
+        analyzed[gene] = (gene, False)
+        return gene, False
 
 
 def filter_geneset(lst,
@@ -162,32 +210,12 @@ def filter_geneset(lst,
 
     results = []
     for gene in lst:
-        data = matrx.loc[gene, :].values
-        mean = np.mean(data)
-
-        # Skip Genes that have a mean below the mean filter
-        if mean < gene_mean_filter:
-            continue
-
-        # Center the expression data. This data should not be
-        # centered before this step
-        data = data - mean
-
-        # Reshape the data so that it is compatible with the
-        # mixture model
-        data = data.reshape(len(data), 1)
-
-        # For debugging:
-        #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
-        #print res
-
-        if covariate is not None:
-            covariate = covariate.values
 
         # Determine if gene and covariate is multimodal
         res = pool.apply_async(is_multimodal, args=(gene,
-                                                    data,
+                                                    matrx,
                                                     covariate,
+                                                    gene_mean_filter,
                                                     min_prob_filter,
                                                     output_dir,
                                                     save_genes,
@@ -252,7 +280,8 @@ def main():
                         required=False)
 
     parser.add_argument('-c', '--covariate',
-                        help='sample X covariate matrix.',
+                        help='sample X covariate matrix. There must be a row "keep" that specifies whether to keep '
+                             'or remove genes that correlate with variable using a boolean. 1: keep. 0: remove.',
                         required=False)
 
     parser.add_argument('--CPU',
@@ -319,6 +348,12 @@ def main():
                         help='Skips gene sets with fewer than X multimodal genes.',
                         type=int,
                         default=5)
+
+    parser.add_argument('--num-laps',
+                        dest='num_laps',
+                        help='Number of laps for VB algorithm.',
+                        type=int,
+                        default=500)
 
     parser.add_argument('--debug',
                         action='store_true')
@@ -416,10 +451,11 @@ def main():
                                 header=None,
                                 index_col=0)
 
-        covariate = covariate.reindex(matrx.columns)
-        if args.debug:
-            pth = os.path.join(args.output_dir, 'covariate.tsv')
-            covariate.to_csv(pth, sep='\t', header=None)
+        if 'keep' not in covariate.index:
+            raise ValueError("Need a keep row in the covariate matrix!")
+
+        #
+        covariate.loc['keep', :] = covariate.loc['keep', :].astype('bool')
 
     # Iterate over the gene sets and select for multimodally expressed genes
     filtered_genesets = defaultdict(set)
@@ -479,7 +515,15 @@ def main():
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
 
         # Fit multivariate model
-        hmodel = subprocess_fit(gs, dataset, gamma, sF, K, save_output=args.debug)
+        hmodel, converged = subprocess_fit(gs,
+                                           dataset,
+                                           gamma,
+                                           sF,
+                                           K,
+                                           save_output=args.debug)
+
+        if converged is False:
+            logging.info("WARNING: Multivariate model did not converge!")
 
         # Get the sample assignments
         LP = hmodel.calc_local_params(dataset)

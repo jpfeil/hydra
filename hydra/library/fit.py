@@ -1,4 +1,5 @@
 import os
+import re
 import bnpy
 import tempfile
 import shutil
@@ -31,9 +32,9 @@ def fit_model(name, dataset):
     K = 5                    # Numver of initial clusters
 
     workdir = tempfile.mkdtemp(prefix=name)
-    outputdir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
-                                                                                           G=gamma,
-                                                                                           Cov=sF)
+    outputdir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle,delete/'.format(K=K,
+                                                                                         G=gamma,
+                                                                                         Cov=sF)
     output_path = os.path.join(workdir, outputdir)
 
     blockPrint()
@@ -49,7 +50,7 @@ def fit_model(name, dataset):
                                         sF=sF,
                                         ECovMat='eye',
                                         K=K,
-                                        moves='birth,merge,shuffle')
+                                        moves='birth,merge,shuffle,delete')
     enablePrint()
 
     shutil.rmtree(workdir)
@@ -76,11 +77,15 @@ def run(cmd, timeout_sec):
     return stdout, stderr
 
 
+converged_regex = re.compile("... done. converged.")
+
+
 def subprocess_fit(name,
                  dataset,
                  gamma=1.0,
                  sF=0.5,
                  K=5,
+                 nLap=500,
                  save_output=False,
                  timeout_sec=900):
     """
@@ -96,9 +101,9 @@ def subprocess_fit(name,
     """
 
     workdir = tempfile.mkdtemp(prefix="%s_" % name)
-    output_dir = 'trymoves-K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle/'.format(K=K,
-                                                                                            G=gamma,
-                                                                                            Cov=sF)
+    output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle,delete/'.format(K=K,
+                                                                                          G=gamma,
+                                                                                          Cov=sF)
     output_path = os.path.join(workdir, output_dir)
 
     csv_file_path = os.path.join(workdir, "%s.csv" % name)
@@ -110,21 +115,27 @@ def subprocess_fit(name,
                     Gauss 
                     memoVB 
                     --K {K}
-                    --nLap 500
+                    --nLap {nLap}
                     --nTask 1
                     --nBatch 1
                     --gamma0 {G}
                     --sF {sF}
                     --ECovMat eye
-                    --moves birth,merge,shuffle
+                    --moves birth,merge,shuffle,delete
                     --output_path {output}
           """.format(data=csv_file_path,
                      K=K,
+                     nLap=nLap,
                      G=gamma,
                      sF=sF,
                      output=output_path)
 
-    run(cmd, timeout_sec=timeout_sec)
+    stdout, _ = run(cmd, timeout_sec=timeout_sec)
+
+    converged = False
+    m = converged_regex.search(stdout)
+    if m:
+        converged = True
 
     hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
                                                           prefix='Best')
@@ -135,4 +146,4 @@ def subprocess_fit(name,
     else:
         print("Output:\n%s" % workdir)
 
-    return hmodel
+    return hmodel, converged
