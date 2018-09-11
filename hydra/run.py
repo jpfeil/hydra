@@ -424,7 +424,7 @@ def main():
         if args.immune:
             dirs = ['immune'] + dirs
 
-        sets, gs_map = get_genesets(dirs)
+        sets, gs_map = get_genesets(dirs, src)
 
         if len(sets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")

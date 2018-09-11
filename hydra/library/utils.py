@@ -22,7 +22,7 @@ def mkdir_p(path):
             raise
 
 
-def get_genesets(dirs):
+def get_genesets(dirs, src):
     """
     Formats the paths to the gene set files
 
