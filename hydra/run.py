@@ -57,7 +57,7 @@ def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, deb
         found_cov = False
         try:
             _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-            logger.debug("Gene: %s, Covariate: %s, P-value %.2f" % (gene, cov, cov_p))
+            logger.debug("Gene: %s, Covariate: %s, P-value: %.2f, Alpha: %.2f" % (gene, cov, cov_p, alpha))
             if cov_p < alpha:
                 found_cov = True
 
@@ -168,7 +168,7 @@ def is_multimodal(gene,
                     result = False
 
                 elif r is True:
-                    logger.debug("%s was passed correlation filter %s" % (gene, name))
+                    logger.debug("%s passed correlation filter %s" % (gene, name))
 
                 else:
                     raise ValueError()
@@ -467,7 +467,6 @@ def main():
         logging.info("Reading in covariate:\n%s" % args.covariate)
         covariate = pd.read_csv(args.covariate,
                                 sep='\t',
-                                header=None,
                                 index_col=0)
 
         if 'keep' not in covariate.index:
