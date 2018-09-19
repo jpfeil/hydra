@@ -163,19 +163,12 @@ def is_multimodal(gene,
                                           alpha=alpha)
 
             for r, k, name in zip(results, keeps, covariate.columns):
-                if r is False and k is False:
-                    logger.debug("%s was removed because it correlates with %s" % (gene, name))
+                if r is False:
+                    logger.debug("%s was removed by correlation filter %s" % (gene, name))
                     result = False
 
-                elif r is False and k is True:
-                    logger.debug("%s was removed because it does not correlates with %s" % (gene, name))
-                    result = False
-
-                elif r is True and k is True:
-                    logger.debug("%s was kept because it correlates with %s" % (gene, name))
-
-                elif r is True and k is False:
-                    logger.debug("%s was kept because it does not correlates with %s" % (gene, name))
+                elif r is True:
+                    logger.debug("%s was passed correlation filter %s" % (gene, name))
 
                 else:
                     raise ValueError()
