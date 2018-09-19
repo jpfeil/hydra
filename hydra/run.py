@@ -18,7 +18,7 @@ from library.notebook import create_notebook
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=False):
+def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, debug=False):
     """
     Determine if clustering separates data into statistically different components
 
@@ -30,7 +30,7 @@ def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=Fal
     if keep is None:
         raise ValueError("Need to specify whether or not to keep gene based on covariate!")
 
-    print(keep)
+    logger = logging.getLogger('root')
 
     # Fit the data again to determine the assignments
     LP = model.calc_local_params(data)
@@ -38,7 +38,6 @@ def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=Fal
 
     keeps = []
     for k, cov in zip(keep, covariate.columns):
-        print(cov, k)
 
         # Create a separate group for each assignment
         cov_groups = [[] for _ in range(max(asnmts) + 1)]
@@ -48,7 +47,7 @@ def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=Fal
             if pd.isnull(c):
                 continue
 
-            cov_groups[a].append(float(c))
+            cov_groups[a].append( float(c) )
 
         # Remove groups with a small sample size
         cov_groups = [x for x in cov_groups if len(x) > 5]
@@ -58,6 +57,7 @@ def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=Fal
         found_cov = False
         try:
             _, cov_p = kruskal(*cov_groups, nan_policy='raise')
+            logger.debug("Gene: %s, Covariate: %s, P-value %.2f" % (gene, cov, cov_p))
             if cov_p < alpha:
                 found_cov = True
 
@@ -66,18 +66,15 @@ def distinct_covariates(data, model, covariate, keep=None, alpha=0.01, debug=Fal
 
         except ValueError:
             if len(cov_groups) == 1:
-                logging.debug("All covariate data clustered into one group.")
+                logger.info("%s covariate data clustered into one group." % cov)
 
         if k is True:
-            print 'keep is True', found_cov
             keeps.append(found_cov)
 
         elif k is False:
-            print 'keep is False', not found_cov
             keeps.append(not found_cov)
 
-    return all(keeps)
-
+    return keeps
 
 
 # Global variable for keeping track of multimodally expressed genes
@@ -106,17 +103,19 @@ def is_multimodal(gene,
     :param alpha: significance threshold
     :return:
     """
-
     # If we have analyzed this sample before,
     # then just take that value and save some time
     if gene in analyzed:
         return analyzed[gene]
+
+    logger = logging.getLogger('root')
 
     data = matrx.loc[gene, :].values
     mean = np.mean(data)
 
     # Skip Genes that have a mean below the mean filter
     if mean < gene_mean_filter:
+        logger.debug("Gene %s was removed by mean filter." % gene)
         return gene, False
 
     # Center the expression data. This data should not be
@@ -127,30 +126,27 @@ def is_multimodal(gene,
     # mixture model
     data = data.reshape(len(data), 1)
 
-    # For debugging:
-    #res = is_multimodal(gene, data, covariate, min_prob_filter, output_dir)
-    #print res
-
-    keep = None
+    keeps = None
     if covariate is not None:
-        keep = covariate.loc['keep', :].values
+        keeps = [bool(x) for x in covariate.loc['keep', :].values]
         covariate = covariate.reindex(matrx.columns)
 
     # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model, converged = subprocess_fit(gene, X, gamma=5.0)
+    model, converged = subprocess_fit(gene, X, gamma=5.0, K=3)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
     # Do not consider genes where the model did not converge
     if converged is False:
-        logging.info("Model did not converge for %s" % gene)
+        logger.info("Model did not converge for %s" % gene)
         return gene, False
 
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
+        logger.info("Gene %s was removed by min prob filter." % gene)
         analyzed[gene] = (gene, False)
         return gene, False
 
@@ -159,7 +155,30 @@ def is_multimodal(gene,
 
         # Make sure gene is multimodal with respect to covariate
         if covariate is not None:
-            result = distinct_covariates(X, model, covariate, keep=keep, alpha=alpha)
+            results = distinct_covariates(gene,
+                                          X,
+                                          model,
+                                          covariate,
+                                          keep=keeps,
+                                          alpha=alpha)
+
+            for r, k, name in zip(results, keeps, covariate.columns):
+                if r is False and k is False:
+                    logger.debug("%s was removed because it correlates with %s" % (gene, name))
+                    result = False
+
+                elif r is False and k is True:
+                    logger.debug("%s was removed because it does not correlates with %s" % (gene, name))
+                    result = False
+
+                elif r is True and k is True:
+                    logger.debug("%s was kept because it correlates with %s" % (gene, name))
+
+                elif r is True and k is False:
+                    logger.debug("%s was kept because it does not correlates with %s" % (gene, name))
+
+                else:
+                    raise ValueError()
 
         # Save genes for future analysis
         if result is True and output_dir and save_genes:
@@ -168,10 +187,12 @@ def is_multimodal(gene,
             bnpy.ioutil.ModelWriter.save_model(model,
                                                _dir,
                                                prefix=gene)
+
         analyzed[gene] = (gene, result)
         return gene, result
 
     else:
+        logger.debug("Gene %s was removed because it is unimodal" % gene)
         analyzed[gene] = (gene, False)
         return gene, False
 
@@ -355,6 +376,9 @@ def main():
                         type=int,
                         default=500)
 
+    parser.add_argument('--test',
+                        action='store_true')
+
     parser.add_argument('--debug',
                         action='store_true')
 
@@ -368,8 +392,12 @@ def main():
     mkdir_p(args.output_dir)
 
     # Start logging
+    level = logging.INFO
+    if args.debug:
+        level = logging.DEBUG
+
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
-                        level=logging.INFO)
+                        level=level)
 
     logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -387,16 +415,14 @@ def main():
 
     # Remove duplicates in index
     logging.info("Removing duplicate genes:")
-    logging.info("Started with: %d" % len(matrx))
     matrx = matrx[~matrx.index.duplicated(keep='first')]
-    logging.info("Ended with: %d" % len(matrx))
 
     for gene in matrx.index:
         if '/' in gene:
             raise ValueError("Gene names cannot contain forward slashes!")
 
     # Determine which gene sets are included.
-    if args.debug:
+    if args.test:
         logging.info("Loading debug gene sets...")
         sets, gs_map = get_test_genesets(src)
         genesets = read_genesets(sets)
@@ -510,7 +536,7 @@ def main():
 
         # Starting with one cluster because most
         # distributions will likely have only one cluster.
-        K = 1
+        K = 3
 
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
 
@@ -520,7 +546,7 @@ def main():
                                            gamma,
                                            sF,
                                            K,
-                                           save_output=args.debug)
+                                           save_output=args.save_genes)
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")

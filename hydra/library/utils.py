@@ -6,6 +6,7 @@ from collections import defaultdict
 
 
 
+
 def mkdir_p(path):
     """
     https://stackoverflow.com/questions/600268/mkdir-p-functionality-in-python
