@@ -57,7 +57,15 @@ def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, deb
         found_cov = False
         try:
             _, cov_p = kruskal(*cov_groups, nan_policy='raise')
-            logger.debug("Gene: %s, Covariate: %s, P-value: %.2f, Alpha: %.2f" % (gene, cov, cov_p, alpha))
+            logger.debug("Gene: %s, Covariate: %s, P-value: %.8f, Alpha: %.8f" % (gene,
+                                                                                  cov,
+                                                                                  cov_p,
+                                                                                  alpha))
+
+            # Kruskal-Wallis is an omnibus test which apparently controls for the
+            # false positive rate:
+            # https://stats.stackexchange.com/questions/133444/bonferroni-correction-on-multiple-kruskal-wallis-tests
+
             if cov_p < alpha:
                 found_cov = True
 
@@ -218,10 +226,6 @@ def filter_geneset(lst,
     """
     pool = multiprocessing.Pool(processes=CPU)
 
-    # Set the alpha for determining
-    # statistically significant covariate genes
-    alpha = 0.01 / len(lst)
-
     results = []
     for gene in lst:
 
@@ -232,8 +236,7 @@ def filter_geneset(lst,
                                                     gene_mean_filter,
                                                     min_prob_filter,
                                                     output_dir,
-                                                    save_genes,
-                                                    alpha,))
+                                                    save_genes))
         results.append(res)
 
     output = [x.get() for x in results]
