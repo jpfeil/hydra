@@ -73,8 +73,10 @@ def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, deb
                 raise ValueError("Kruskal-Wallis p-value is NaN")
 
         except ValueError:
+            # Currently I'm keeping genes that fall into this category
+            # but maybe I should consider skipping them...
             if len(cov_groups) == 1:
-                logger.info("%s covariate data clustered into one group." % cov)
+                logger.info("%s %s covariate data clustered into one group." % (gene, cov))
 
         if k is True:
             keeps.append(found_cov)
@@ -561,9 +563,6 @@ def main():
                                            prefix=gs)
 
         create_notebook(gs, gsdir)
-
-        if args.debug:
-            break
 
 if __name__ == '__main__':
     main()
