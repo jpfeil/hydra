@@ -145,7 +145,7 @@ def is_multimodal(gene,
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model, converged = subprocess_fit(gene, X, gamma=5.0, K=3)
+    model, converged = subprocess_fit(gene, X, gamma=1.0, K=3)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
@@ -372,7 +372,7 @@ def main():
                         dest='num_laps',
                         help='Number of laps for VB algorithm.',
                         type=int,
-                        default=500)
+                        default=1000)
 
     parser.add_argument('--test',
                         action='store_true')
@@ -526,7 +526,7 @@ def main():
         dataset = bnpy.data.XData(data)
 
         # Set the prior for creating a new cluster
-        gamma = 5.0
+        gamma = 1.0
 
         # Start with a standard identity matrix
         sF = 1.0
@@ -535,7 +535,10 @@ def main():
         # distributions will likely have only one cluster.
         K = 3
 
-        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
+        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
+                                                                                              sF,
+                                                                                              K,
+                                                                                              args.num_laps))
 
         # Fit multivariate model
         hmodel, converged = subprocess_fit(gs,
@@ -543,6 +546,7 @@ def main():
                                            gamma,
                                            sF,
                                            K,
+                                           nLap=args.num_laps,
                                            save_output=args.save_genes)
 
         if converged is False:

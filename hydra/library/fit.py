@@ -20,43 +20,6 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def fit_model(name, dataset):
-    """
-
-    :param name:
-    :param dataset: bnpy.data.XData object
-    :return:
-    """
-    gamma = 5.0              # Prior on dirichlet dispersion parameter
-    sF = 0.5                 # Prior covariance matrix is Identity * sF
-    K = 5                    # Numver of initial clusters
-
-    workdir = tempfile.mkdtemp(prefix=name)
-    outputdir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle,delete/'.format(K=K,
-                                                                                         G=gamma,
-                                                                                         Cov=sF)
-    output_path = os.path.join(workdir, outputdir)
-
-    blockPrint()
-    trained_model, info_dict = bnpy.run(dataset,
-                                        'DPMixtureModel',
-                                        'Gauss',
-                                        'memoVB',
-                                        output_path=output_path,
-                                        nLap=500,
-                                        nTask=1,
-                                        nBatch=1,
-                                        gamma0=gamma,
-                                        sF=sF,
-                                        ECovMat='eye',
-                                        K=K,
-                                        moves='birth,merge,shuffle,delete')
-    enablePrint()
-
-    shutil.rmtree(workdir)
-    return trained_model
-
-
 def run(cmd, timeout_sec):
     """
     https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
@@ -83,9 +46,9 @@ converged_regex = re.compile("... done. converged.")
 def subprocess_fit(name,
                  dataset,
                  gamma=1.0,
-                 sF=0.5,
-                 K=5,
-                 nLap=500,
+                 sF=1.0,
+                 K=3,
+                 nLap=1000,
                  save_output=False,
                  timeout_sec=900):
     """
@@ -120,6 +83,8 @@ def subprocess_fit(name,
                     --nBatch 1
                     --gamma0 {G}
                     --sF {sF}
+                    --m_startLap 10
+                    --b_startLap 20
                     --ECovMat eye
                     --moves birth,merge,shuffle,delete
                     --output_path {output}
