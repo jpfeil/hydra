@@ -145,7 +145,7 @@ def is_multimodal(gene,
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model, converged = subprocess_fit(gene, X, gamma=1.0, K=3)
+    model, converged = subprocess_fit(gene, X, gamma=5.0, K=1, sF=2.0)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
@@ -526,14 +526,14 @@ def main():
         dataset = bnpy.data.XData(data)
 
         # Set the prior for creating a new cluster
-        gamma = 1.0
+        gamma = 5.0
 
         # Start with a standard identity matrix
-        sF = 1.0
+        sF = 2.0
 
         # Starting with one cluster because most
         # distributions will likely have only one cluster.
-        K = 3
+        K = 1
 
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
                                                                                               sF,

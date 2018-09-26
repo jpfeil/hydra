@@ -64,7 +64,7 @@ def subprocess_fit(name,
     """
 
     workdir = tempfile.mkdtemp(prefix="%s_" % name)
-    output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,shuffle,delete/'.format(K=K,
+    output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,delete,shuffle/'.format(K=K,
                                                                                           G=gamma,
                                                                                           Cov=sF)
     output_path = os.path.join(workdir, output_dir)
@@ -83,10 +83,11 @@ def subprocess_fit(name,
                     --nBatch 1
                     --gamma0 {G}
                     --sF {sF}
-                    --m_startLap 10
-                    --b_startLap 20
+                    --b_startLap 10
+                    --m_startLap 20
+                    --d_startLap 30
                     --ECovMat eye
-                    --moves birth,merge,shuffle,delete
+                    --moves birth,merge,delete,shuffle
                     --output_path {output}
           """.format(data=csv_file_path,
                      K=K,
