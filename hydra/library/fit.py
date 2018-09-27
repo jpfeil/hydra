@@ -84,8 +84,8 @@ def subprocess_fit(name,
                     --gamma0 {G}
                     --sF {sF}
                     --b_startLap 10
-                    --m_startLap 20
-                    --d_startLap 30
+                    --m_startLap 10
+                    --d_startLap 20
                     --ECovMat eye
                     --moves birth,merge,delete,shuffle
                     --output_path {output}

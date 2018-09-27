@@ -529,11 +529,11 @@ def main():
         gamma = 5.0
 
         # Start with a standard identity matrix
-        sF = 2.0
+        sF = 1.0
 
-        # Starting with one cluster because most
-        # distributions will likely have only one cluster.
-        K = 1
+        # Starting with 5 cluster because starting with
+        # 1 cluster biases the fit towards not finding clusters.
+        K = 5
 
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
                                                                                               sF,
