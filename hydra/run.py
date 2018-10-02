@@ -145,7 +145,16 @@ def is_multimodal(gene,
     X = bnpy.data.XData(data)
 
     # Run the parallel fit model
-    model, converged = subprocess_fit(gene, X, gamma=5.0, K=1, sF=2.0)
+    # This is parameterized to be conservative about
+    # identifying multimodally expressed distributions
+    model, converged = subprocess_fit(gene,
+                                      X,
+                                      gamma=5.0,
+                                      K=1,
+                                      sF=2.0,
+                                      bstart=10,
+                                      mstart=10,
+                                      dstart=20)
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 

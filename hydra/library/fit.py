@@ -49,6 +49,9 @@ def subprocess_fit(name,
                  sF=1.0,
                  K=3,
                  nLap=1000,
+                 bstart=0,
+                 mstart=2,
+                 dstart=2,
                  save_output=False,
                  timeout_sec=900):
     """
@@ -83,9 +86,9 @@ def subprocess_fit(name,
                     --nBatch 1
                     --gamma0 {G}
                     --sF {sF}
-                    --b_startLap 10
-                    --m_startLap 10
-                    --d_startLap 20
+                    --b_startLap {bstart}
+                    --m_startLap {mstart}
+                    --d_startLap {dstart}
                     --ECovMat eye
                     --moves birth,merge,delete,shuffle
                     --output_path {output}
@@ -94,6 +97,9 @@ def subprocess_fit(name,
                      nLap=nLap,
                      G=gamma,
                      sF=sF,
+                     bstart=bstart,
+                     mstart=mstart,
+                     dstart=dstart,
                      output=output_path)
 
     stdout, _ = run(cmd, timeout_sec=timeout_sec)
