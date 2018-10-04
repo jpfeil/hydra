@@ -98,7 +98,8 @@ def is_multimodal(gene,
                   min_prob_filter=None,
                   output_dir=None,
                   save_genes=False,
-                  alpha=0.01):
+                  alpha=0.01,
+                  conservative=False):
     """
     This function determines if there is a multimodal pattern in the data. Also has a bunch of other
     functions that should be factored out. For example, this function also skips genes that do not
@@ -111,6 +112,7 @@ def is_multimodal(gene,
     :param output_dir: path to output directory
     :param save_genes: whether to save the gene fit
     :param alpha: significance threshold
+    :param conservative
     :return:
     """
     # If we have analyzed this sample before,
@@ -144,6 +146,16 @@ def is_multimodal(gene,
     # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
 
+    bstart = 0
+    mstart = 2
+    dstart = 2
+
+    # Run with conservative parameterization
+    if conservative:
+        bstart = 10
+        mstart = 10
+        dstart = 20
+
     # Run the parallel fit model
     # This is parameterized to be conservative about
     # identifying multimodally expressed distributions
@@ -152,9 +164,10 @@ def is_multimodal(gene,
                                       gamma=5.0,
                                       K=1,
                                       sF=2.0,
-                                      bstart=10,
-                                      mstart=10,
-                                      dstart=20)
+                                      bstart=bstart,
+                                      mstart=mstart,
+                                      dstart=dstart)
+
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
@@ -216,7 +229,8 @@ def filter_geneset(lst,
                    gene_mean_filter=None,
                    min_prob_filter=None,
                    output_dir=None,
-                   save_genes=False):
+                   save_genes=False,
+                   conservative=False):
     """
     Applies non-parametric mixture model to expression data. Can optionally add
     a covariate (e.g. survival, IC50) to select genes that vary with a variable of
@@ -247,7 +261,8 @@ def filter_geneset(lst,
                                                     gene_mean_filter,
                                                     min_prob_filter,
                                                     output_dir,
-                                                    save_genes))
+                                                    save_genes,
+                                                    conservative))
         results.append(res)
 
     output = [x.get() for x in results]
@@ -383,6 +398,10 @@ def main():
                         type=int,
                         default=1000)
 
+    parser.add_argument('--conservative',
+                        help='Runs univariate filter in conservative mode.',
+                        action='store_true')
+
     parser.add_argument('--test',
                         action='store_true')
 
@@ -501,7 +520,8 @@ def main():
                                                gene_mean_filter=args.min_mean_filter,
                                                min_prob_filter=args.min_prob_filter,
                                                output_dir=args.output_dir,
-                                               save_genes=args.save_genes)
+                                               save_genes=args.save_genes,
+                                               conservative=args.conservative)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
@@ -575,7 +595,7 @@ def main():
                                            gsdir,
                                            prefix=gs)
 
-        create_notebook(gs, gsdir)
+        create_notebook(src, gs, gsdir)
 
 if __name__ == '__main__':
     main()
