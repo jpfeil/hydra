@@ -8,116 +8,266 @@ import numpy as np
 import pandas as pd
 
 from collections import defaultdict
+from scipy.stats import kruskal
 
-from library.utils import mkdir_p, parallel_fit
+from library.fit import subprocess_fit
+from library.utils import mkdir_p, get_genesets, get_test_genesets, read_genesets
 from library.notebook import create_notebook
+
 
 src = os.path.dirname(os.path.abspath(__file__))
 
 
-def get_genesets(dirs):
+def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, debug=False):
     """
-    Formats the paths to the gene set files
+    Determine if clustering separates data into statistically different components
 
-    :param list dirs: Gene set directories
-    :return: Path to gene set files
-    :rtype: list
+    :param data: XData object
+    :param model: bnpy model
+    :param covariate: numpy array in the same order as the data object
     """
-    pths = []
-    gs_map = {}
-    for d in dirs:
-        logging.info("Pulling %s gene sets:" % d)
-        gs_dir = os.path.join(src, 'gene-sets', d)
-        gss = os.listdir(gs_dir)
-        for s in gss:
-            logging.info("\t%s" % s)
-            gs_pth = os.path.join(gs_dir, s)
-            pths.append(gs_pth)
-            gs_map[s] =  d
 
-    return pths, gs_map
+    if keep is None:
+        raise ValueError("Need to specify whether or not to keep gene based on covariate!")
+
+    logger = logging.getLogger('root')
+
+    # Fit the data again to determine the assignments
+    LP = model.calc_local_params(data)
+    asnmts = LP['resp'].argmax(axis=1)
+
+    keeps = []
+    for k, cov in zip(keep, covariate.columns):
+
+        # Create a separate group for each assignment
+        cov_groups = [[] for _ in range(max(asnmts) + 1)]
+
+        # Add data to the appropriate elements in the list
+        for c, a in zip(covariate[cov], asnmts):
+            if pd.isnull(c):
+                continue
+
+            cov_groups[a].append( float(c) )
+
+        # Remove groups with a small sample size
+        cov_groups = [x for x in cov_groups if len(x) > 5]
+
+        # Determine if the covariate data is statistically
+        # different by a non-parametric Kruskal-Wallis test
+        found_cov = False
+        try:
+            _, cov_p = kruskal(*cov_groups, nan_policy='raise')
+            logger.debug("Gene: %s, Covariate: %s, P-value: %.8f, Alpha: %.8f" % (gene,
+                                                                                  cov,
+                                                                                  cov_p,
+                                                                                  alpha))
+
+            # Kruskal-Wallis is an omnibus test which apparently controls for the
+            # false positive rate:
+            # https://stats.stackexchange.com/questions/133444/bonferroni-correction-on-multiple-kruskal-wallis-tests
+
+            if cov_p < alpha:
+                found_cov = True
+
+            elif pd.isnull(cov_p):
+                raise ValueError("Kruskal-Wallis p-value is NaN")
+
+        except ValueError:
+            # Currently I'm keeping genes that fall into this category
+            # but maybe I should consider skipping them...
+            if len(cov_groups) == 1:
+                logger.info("%s %s covariate data clustered into one group." % (gene, cov))
+
+        if k is True:
+            keeps.append(found_cov)
+
+        elif k is False:
+            keeps.append(not found_cov)
+
+    return keeps
 
 
-def get_test_genesets():
-    d = os.path.join(src, 'test', 'gene-sets')
-    sets = os.listdir(d)
-    logging.info("Available Gene Sets:")
-
-    for s in sets:
-        logging.info(s)
-
-    pths = []
-    gs_map  = {}
-    for s in sets:
-        gs_map[s] = 'test'
-        pth =  os.path.join(d, s)
-        pths.append(pth)
-
-    return pths, gs_map
-
-
-def read_genesets(sets):
-    gs = defaultdict(set)
-
-    for s in sets:
-        name = os.path.basename(s)
-        with open(s) as f:
-            for line in f:
-                gene = line.strip()
-                gs[name].add(gene)
-    return gs
-
-
+# Global variable for keeping track of multimodally expressed genes
 analyzed = {}
-def is_multimodal(name, data, min_prob_filter=None):
-    if name in analyzed:
-        return analyzed[name]
 
+
+def is_multimodal(gene,
+                  matrx,
+                  covariate=None,
+                  gene_mean_filter=None,
+                  min_prob_filter=None,
+                  output_dir=None,
+                  save_genes=False,
+                  alpha=0.01,
+                  conservative=False):
+    """
+    This function determines if there is a multimodal pattern in the data. Also has a bunch of other
+    functions that should be factored out. For example, this function also skips genes that do not
+    pass the minimum probability filter.
+
+    :param gene: gene name
+    :param data: expression data
+    :param covariate: covariate data
+    :param min_prob_filter: minimium probability filter
+    :param output_dir: path to output directory
+    :param save_genes: whether to save the gene fit
+    :param alpha: significance threshold
+    :param conservative
+    :return:
+    """
+    # If we have analyzed this sample before,
+    # then just take that value and save some time
+    if gene in analyzed:
+        return analyzed[gene]
+
+    logger = logging.getLogger('root')
+
+    data = matrx.loc[gene, :].values
+    mean = np.mean(data)
+
+    # Skip Genes that have a mean below the mean filter
+    if mean < gene_mean_filter:
+        logger.debug("Gene %s was removed by mean filter." % gene)
+        return gene, False
+
+    # Center the expression data. This data should not be
+    # centered before this step
+    data = data - mean
+
+    # Reshape the data so that it is compatible with the
+    # mixture model
+    data = data.reshape(len(data), 1)
+
+    keeps = None
+    if covariate is not None:
+        keeps = [bool(x) for x in covariate.loc['keep', :].values]
+        covariate = covariate.reindex(matrx.columns)
+
+    # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
-    model = parallel_fit(name, X)
+
+    bstart = 0
+    mstart = 2
+    dstart = 2
+
+    # Run with conservative parameterization
+    if conservative:
+        bstart = 10
+        mstart = 10
+        dstart = 20
+
+    # Run the parallel fit model
+    # This is parameterized to be conservative about
+    # identifying multimodally expressed distributions
+    model, converged = subprocess_fit(gene,
+                                      X,
+                                      gamma=5.0,
+                                      K=1,
+                                      sF=2.0,
+                                      bstart=bstart,
+                                      mstart=mstart,
+                                      dstart=dstart)
+
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
 
+    # Do not consider genes where the model did not converge
+    if converged is False:
+        logger.info("Model did not converge for %s" % gene)
+        return gene, False
+
     # Remove genes that have a low component frequency
     if min_prob < min_prob_filter:
-        analyzed[name] = (name, False)
-        return name, False
+        logger.info("Gene %s was removed by min prob filter." % gene)
+        analyzed[gene] = (gene, False)
+        return gene, False
 
     elif len(probs) > 1:
-        analyzed[name] = (name, True)
-        return name, True
+        result = True
+
+        # Make sure gene is multimodal with respect to covariate
+        if covariate is not None:
+            results = distinct_covariates(gene,
+                                          X,
+                                          model,
+                                          covariate,
+                                          keep=keeps,
+                                          alpha=alpha)
+
+            for r, k, name in zip(results, keeps, covariate.columns):
+                if r is False:
+                    logger.debug("%s was removed by correlation filter %s" % (gene, name))
+                    result = False
+
+                elif r is True:
+                    logger.debug("%s passed correlation filter %s" % (gene, name))
+
+                else:
+                    raise ValueError()
+
+        # Save genes for future analysis
+        if result is True and output_dir and save_genes:
+            _dir = os.path.join(output_dir, 'MultiModalGenes', gene)
+            mkdir_p(_dir)
+            bnpy.ioutil.ModelWriter.save_model(model,
+                                               _dir,
+                                               prefix=gene)
+
+        analyzed[gene] = (gene, result)
+        return gene, result
 
     else:
-        analyzed[name] = (name, False)
-        return name, False
+        logger.debug("Gene %s was removed because it is unimodal" % gene)
+        analyzed[gene] = (gene, False)
+        return gene, False
 
 
-def filter_geneset(lst, matrx, CPU=1, gene_mean_filter=None, min_prob_filter=None):
+def filter_geneset(lst,
+                   matrx,
+                   covariate=None,
+                   CPU=1,
+                   gene_mean_filter=None,
+                   min_prob_filter=None,
+                   output_dir=None,
+                   save_genes=False,
+                   conservative=False):
     """
+    Applies non-parametric mixture model to expression data. Can optionally add
+    a covariate (e.g. survival, IC50) to select genes that vary with a variable of
+    interest.
 
-    :param lst: List of genes
-    :param matrx: Expression dataframe
+    Loops over a list of genes and selects rows in the expression matrix. Creates
+    a bivariate data set for analyzing genes that covary with a variable of interest.
+
+    :param lst (list): list of genes
+    :param matrx (pd.DataFrame): expression dataframe
+    :param covariate (np.array): covariate vector
+    :param CPU (int): number of CPUs available
+    :param gene_mean_filter (float): mean threshold for filtering genes
+    :param min_prob_filter (float): min probability threshold for filtering genes
+    :param output_dir (str): path to output directory for saving intermediate files
+    :param save_genes (bool): flag for deciding whether or not to save the gene models
     :return:
     """
     pool = multiprocessing.Pool(processes=CPU)
 
     results = []
     for gene in lst:
-        data = matrx.loc[gene, :].values
-        mean = np.mean(data)
 
-        # Skip Genes that have a mean below the mean filter
-        if mean < gene_mean_filter:
-            continue
-
-        data = data - mean
-        data = data.reshape(len(data), 1)
-        res = pool.apply_async(is_multimodal, args=(gene, data, min_prob_filter,))
+        # Determine if gene and covariate is multimodal
+        res = pool.apply_async(is_multimodal, args=(gene,
+                                                    matrx,
+                                                    covariate,
+                                                    gene_mean_filter,
+                                                    min_prob_filter,
+                                                    output_dir,
+                                                    save_genes,
+                                                    conservative))
         results.append(res)
 
     output = [x.get() for x in results]
 
-    # Remove duplicate genes
+    # Select multimodal genes
     return list(set([x[0] for x in output if x[1] is True]))
 
 
@@ -156,13 +306,26 @@ def find_aliases(gss, mapper, index):
 
 def main():
     """
-    Fits one, two, and three component mixture models and returns fit information in output dir.
+    Fits non-parametric mixture models to expression data. Can add a covariate to filter
+    genes that are differentially expressed with respect to another continuous variable.
+    Finally, there is support for variants, but the variants must be in a format that
+    is similar to expression data. One can sample from a normal distribution to introduce
+    noise to the variant status.
     """
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
                         required=True)
+
+    parser.add_argument('-v', '--variants',
+                        help='Variant identifier by sample matrix.\nName must be distinct from expression.',
+                        required=False)
+
+    parser.add_argument('-c', '--covariate',
+                        help='sample X covariate matrix. There must be a row "keep" that specifies whether to keep '
+                             'or remove genes that correlate with variable using a boolean. 1: keep. 0: remove.',
+                        required=False)
 
     parser.add_argument('--CPU',
                         dest='CPU',
@@ -199,6 +362,18 @@ def main():
                         default=False,
                         action='store_true')
 
+    parser.add_argument('--all-genes',
+                        help='Uses all genes in expression matrix',
+                        dest='all_genes',
+                        default=False,
+                        action='store_true')
+
+    parser.add_argument('--save-genes',
+                        help='Saves multimodal gene fits',
+                        dest='save_genes',
+                        default=False,
+                        action='store_true')
+
     parser.add_argument('--min-mean-filter',
                         dest='min_mean_filter',
                         help='Removes genes with an average expression below value.',
@@ -217,6 +392,19 @@ def main():
                         type=int,
                         default=5)
 
+    parser.add_argument('--num-laps',
+                        dest='num_laps',
+                        help='Number of laps for VB algorithm.',
+                        type=int,
+                        default=1000)
+
+    parser.add_argument('--conservative',
+                        help='Runs univariate filter in conservative mode.',
+                        action='store_true')
+
+    parser.add_argument('--test',
+                        action='store_true')
+
     parser.add_argument('--debug',
                         action='store_true')
 
@@ -226,10 +414,16 @@ def main():
 
     args = parser.parse_args()
 
+    # Make the output directory if it doesn't already exist
     mkdir_p(args.output_dir)
 
+    # Start logging
+    level = logging.INFO
+    if args.debug:
+        level = logging.DEBUG
+
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
-                        level=logging.INFO)
+                        level=level)
 
     logging.getLogger().addHandler(logging.StreamHandler())
 
@@ -239,9 +433,30 @@ def main():
     for key, value in vars(args).items():
         logging.info('\t%s: %s' % (key, value))
 
+    # Read in expression data
+    logging.info("Reading in expression data:\n%s" % args.expression)
+    matrx = pd.read_csv(args.expression,
+                        sep='\t',
+                        index_col=0)
+
+    # Remove duplicates in index
+    logging.info("Removing duplicate genes:")
+    matrx = matrx[~matrx.index.duplicated(keep='first')]
+
+    for gene in matrx.index:
+        if '/' in gene:
+            raise ValueError("Gene names cannot contain forward slashes!")
+
     # Determine which gene sets are included.
-    if args.debug:
-        sets, gs_map = get_test_genesets()
+    if args.test:
+        logging.info("Loading debug gene sets...")
+        sets, gs_map = get_test_genesets(src)
+        genesets = read_genesets(sets)
+
+    elif args.all_genes:
+        logging.info("Creating ALL_GENES gene set...")
+        gs_map = {'ALL_GENES': 'ALL_GENES' }
+        genesets = {'ALL_GENES': set(matrx.index.values)}
 
     else:
         dirs = ['misc']
@@ -261,23 +476,17 @@ def main():
         if args.immune:
             dirs = ['immune'] + dirs
 
-        sets, gs_map = get_genesets(dirs)
+        sets, gs_map = get_genesets(dirs, src)
 
         if len(sets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
 
-    genesets = read_genesets(sets)
-
-    matrx = pd.read_csv(args.expression,
-                        sep='\t',
-                        index_col=0)
-
-    # Remove duplicates in index
-    matrx = matrx[~matrx.index.duplicated(keep='first')]
+        genesets = read_genesets(sets)
 
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
     alias_mapper = pd.read_csv(pth, sep='\t')
+    logging.info("Looking for gene aliases...")
     genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
     if args.min_mean_filter is not None:
@@ -286,22 +495,40 @@ def main():
     if args.min_prob_filter is not None:
         logging.info("Minimum component probability: %0.2f" % args.min_prob_filter)
 
+    covariate = None
+    if args.covariate is not None:
+        logging.info("Reading in covariate:\n%s" % args.covariate)
+        covariate = pd.read_csv(args.covariate,
+                                sep='\t',
+                                index_col=0)
+
+        if 'keep' not in covariate.index:
+            raise ValueError("Need a keep row in the covariate matrix!")
+
+        #
+        covariate.loc['keep', :] = covariate.loc['keep', :].astype('bool')
+
+    # Iterate over the gene sets and select for multimodally expressed genes
     filtered_genesets = defaultdict(set)
     for gs, genes in genesets.items():
 
         start = len(genes)
         filtered_genesets[gs] = filter_geneset(list(genes),
                                                matrx,
+                                               covariate=covariate,
                                                CPU=args.CPU,
                                                gene_mean_filter=args.min_mean_filter,
-                                               min_prob_filter=args.min_prob_filter)
+                                               min_prob_filter=args.min_prob_filter,
+                                               output_dir=args.output_dir,
+                                               save_genes=args.save_genes,
+                                               conservative=args.conservative)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
                                                                          x=start,
                                                                          y=end))
         if end < args.min_num_filter:
-            logging.info("Skipping {gs} because there are not enough genes".format(gs=gs))
+            logging.info("Skipping {gs} because there are not enough genes to cluster".format(gs=gs))
             continue
 
         gs_root = gs_map[gs]
@@ -310,15 +537,15 @@ def main():
         gsdir = os.path.join(args.output_dir, gs_root, gs)
         mkdir_p(gsdir)
 
-        # Center data to make inference easier
-        center = matrx.loc[filtered_genesets[gs], :].apply(lambda x: x - x.mean(), axis=1)
-
-        # Trying to figure out where the duplicate index is coming from
-        center = center[~center.index.duplicated(keep='first')]
+        # Create training data for the model fit
+        training = matrx.loc[filtered_genesets[gs], :]
 
         # Save the expression data for future analysis
-        pth = os.path.join(gsdir, 'expression.tsv')
-        matrx.loc[filtered_genesets[gs]].to_csv(pth, sep='\t')
+        pth = os.path.join(gsdir, 'training-data.tsv')
+        training.to_csv(pth, sep='\t')
+
+        # Center data to make inference easier
+        center = training.apply(lambda x: x - x.mean(), axis=1)
 
         # Need to take the transpose
         # Samples x Genes
@@ -327,14 +554,32 @@ def main():
         # Create dataset object for inference
         dataset = bnpy.data.XData(data)
 
-        gamma = 1.0
-        sF = 0.5
+        # Set the prior for creating a new cluster
+        gamma = 5.0
+
+        # Start with a standard identity matrix
+        sF = 1.0
+
+        # Starting with 5 cluster because starting with
+        # 1 cluster biases the fit towards not finding clusters.
         K = 5
 
-        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d" % (gamma, sF, K))
+        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
+                                                                                              sF,
+                                                                                              K,
+                                                                                              args.num_laps))
 
         # Fit multivariate model
-        hmodel = parallel_fit(gs, dataset, gamma, sF, K, save_output=args.debug)
+        hmodel, converged = subprocess_fit(gs,
+                                           dataset,
+                                           gamma,
+                                           sF,
+                                           K,
+                                           nLap=args.num_laps,
+                                           save_output=args.save_genes)
+
+        if converged is False:
+            logging.info("WARNING: Multivariate model did not converge!")
 
         # Get the sample assignments
         LP = hmodel.calc_local_params(dataset)
@@ -350,10 +595,7 @@ def main():
                                            gsdir,
                                            prefix=gs)
 
-        create_notebook(gs, gsdir)
-
-        if args.debug:
-            break
+        create_notebook(src, gs, gsdir)
 
 if __name__ == '__main__':
     main()

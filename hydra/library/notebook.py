@@ -1,7 +1,8 @@
 import nbformat as nbf
 import os
 
-def create_notebook(gs, output_dir):
+
+def create_notebook(src, gs, output_dir):
     """
     Creates a jupyter notebook for analyzing the output of
     hydra.
@@ -46,8 +47,8 @@ for comp in range(len(hmodel.allocModel.get_active_comp_probs())):
 if len(means) == 1:
     raise ValueError("Only one component was identified!")
     
-pth = os.path.join(os.path.abspath('.'), 'expression.tsv')
-exp = pd.read_csv(pth, sep='\t', index_col=0)
+pth = os.path.join(os.path.abspath('.'), 'training-data.tsv')
+exp = pd.read_csv(pth, sep='\\t', index_col=0)
 exp.head()
        
 mean_df  = pd.DataFrame(data=np.vstack(means).T,
@@ -131,13 +132,60 @@ sns.clustermap(zscore_df,
     print_genes = """\
 print "\\n".join(row_groups[1]);"""
 
+    fgsea = """\
+import subprocess
+from scipy.stats import ttest_ind
+
+pth = <PATH TO BACKGROUND EXPRESSION>
+background = pd.read_csv(pth, sep='\\t', index_col=0)
+
+assign = pd.read_csv('assignments.tsv', 
+                     sep='\\t', 
+                     index_col=0, 
+                     header=None)
+
+cmd = ["/usr/bin/Rscript",
+       "%s/bin/fgsea.R",
+       <PATH TO GENE SET FILE (.gmt)>,
+       "/tmp/fgsea-analysis.rnk",
+       "/tmp/fgsea-analysis.fgsea"]
+
+fgseas = {}
+for cluster, rows in assign.groupby(1):
+    ins = rows.index.values
+    outs = [x for x in background.columns if x not in ins]
+    
+    res = ttest_ind(background[ins].values,
+                    background[outs].values,
+                    axis=1).statistic
+                    
+    tstats = pd.DataFrame(index=background.index, 
+                          data=res).dropna()
+                          
+    tstats = tstats.sort_values(0, ascending=False).reset_index()
+    
+    tstats.to_csv('/tmp/fgsea-analysis.rnk',
+                  header=None,
+                  sep='\\t',
+                  index=False)
+                  
+    subprocess.check_call(cmd)
+    
+    fgsea = pd.read_csv('/tmp/fgsea-analysis.fgsea')
+    
+    fgseas[cluster] = fgsea
+    
+    os.remove('/tmp/fgsea-analysis.rnk')
+    os.remove('/tmp/fgsea-analysis.fgsea')""" % src
+
     nb['cells'] = [nbf.v4.new_markdown_cell(text)] + \
                   [nbf.v4.new_code_cell(x) for x in [import_statements,
                                                      load_model,
                                                      functions,
                                                      row_dendro,
                                                      cluster_map,
-                                                     print_genes]]
+                                                     print_genes,
+                                                     fgsea]]
 
     pth = os.path.join(output_dir, '%s.ipynb' % gs)
     nbf.write(nb, pth)
