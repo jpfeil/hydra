@@ -48,7 +48,7 @@ if len(means) == 1:
     raise ValueError("Only one component was identified!")
     
 pth = os.path.join(os.path.abspath('.'), 'training-data.tsv')
-exp = pd.read_csv(pth, sep='\t', index_col=0)
+exp = pd.read_csv(pth, sep='\\t', index_col=0)
 exp.head()
        
 mean_df  = pd.DataFrame(data=np.vstack(means).T,
@@ -137,10 +137,10 @@ import subprocess
 from scipy.stats import ttest_ind
 
 pth = <PATH TO BACKGROUND EXPRESSION>
-background = pd.read_csv(pth, sep='\t', index_col=0)
+background = pd.read_csv(pth, sep='\\t', index_col=0)
 
 assign = pd.read_csv('assignments.tsv', 
-                     sep='\t', 
+                     sep='\\t', 
                      index_col=0, 
                      header=None)
 
