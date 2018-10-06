@@ -213,6 +213,17 @@ def is_multimodal(gene,
                                                _dir,
                                                prefix=gene)
 
+            params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: " \
+                     "{b}\nmStart: {m}\ndStart: {d}".format(G=5.0,
+                                                            K=1,
+                                                            sF=2.0,
+                                                            b=bstart,
+                                                            m=mstart,
+                                                            d=dstart)
+            pth = os.path.join(_dir, "PARAMS")
+            with open(pth, "w") as f:
+                f.write(params)
+
         analyzed[gene] = (gene, result)
         return gene, result
 
@@ -575,8 +586,7 @@ def main():
                                            gamma,
                                            sF,
                                            K,
-                                           nLap=args.num_laps,
-                                           save_output=args.save_genes)
+                                           nLap=args.num_laps)
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")

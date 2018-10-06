@@ -140,7 +140,8 @@ pth = <PATH TO BACKGROUND EXPRESSION>
 background = pd.read_csv(pth, sep='\\t', index_col=0)
 
 assign = pd.read_csv('assignments.tsv', 
-                     sep='\\t', 
+                     sep='\
+                     \t', 
                      index_col=0, 
                      header=None)
 
