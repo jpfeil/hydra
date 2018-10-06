@@ -44,16 +44,16 @@ converged_regex = re.compile("... done. converged.")
 
 
 def subprocess_fit(name,
-                 dataset,
-                 gamma=1.0,
-                 sF=1.0,
-                 K=3,
-                 nLap=1000,
-                 bstart=0,
-                 mstart=2,
-                 dstart=2,
-                 save_output=False,
-                 timeout_sec=900):
+                   dataset,
+                   gamma=1.0,
+                   sF=1.0,
+                   K=3,
+                   nLap=1000,
+                   bstart=0,
+                   mstart=2,
+                   dstart=2,
+                   save_output=False,
+                   timeout_sec=900):
     """
 
     :param name:
@@ -112,10 +112,18 @@ def subprocess_fit(name,
     hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
                                                           prefix='Best')
 
+    params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: {b}\n" \
+             "mStart: {m}\ndStart: {d}\nnLap: {n}".format(G=5.0,
+                                                          K=1,
+                                                          sF=2.0,
+                                                          b=bstart,
+                                                          m=mstart,
+                                                          d=dstart,
+                                                          n=nLap)
     if not save_output:
         shutil.rmtree(workdir)
 
     else:
         print("Output:\n%s" % workdir)
 
-    return hmodel, converged
+    return hmodel, converged, params

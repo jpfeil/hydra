@@ -99,7 +99,7 @@ def is_multimodal(gene,
                   output_dir=None,
                   save_genes=False,
                   alpha=0.01,
-                  conservative=False):
+                  sensitive=False):
     """
     This function determines if there is a multimodal pattern in the data. Also has a bunch of other
     functions that should be factored out. For example, this function also skips genes that do not
@@ -112,7 +112,7 @@ def is_multimodal(gene,
     :param output_dir: path to output directory
     :param save_genes: whether to save the gene fit
     :param alpha: significance threshold
-    :param conservative
+    :param sensitive
     :return:
     """
     # If we have analyzed this sample before,
@@ -146,27 +146,27 @@ def is_multimodal(gene,
     # Convert data to a bnpy XData object
     X = bnpy.data.XData(data)
 
-    bstart = 0
-    mstart = 2
-    dstart = 2
+    bstart = 10
+    mstart = 10
+    dstart = 20
 
-    # Run with conservative parameterization
-    if conservative:
-        bstart = 10
-        mstart = 10
-        dstart = 20
+    # Run with sensitive parameterization
+    if sensitive:
+        bstart = 0
+        mstart = 2
+        dstart = 2
 
     # Run the parallel fit model
-    # This is parameterized to be conservative about
+    # This is parameterized to be sensitive about
     # identifying multimodally expressed distributions
-    model, converged = subprocess_fit(gene,
-                                      X,
-                                      gamma=5.0,
-                                      K=1,
-                                      sF=2.0,
-                                      bstart=bstart,
-                                      mstart=mstart,
-                                      dstart=dstart)
+    model, converged, params = subprocess_fit(gene,
+                                              X,
+                                              gamma=5.0,
+                                              K=1,
+                                              sF=2.0,
+                                              bstart=bstart,
+                                              mstart=mstart,
+                                              dstart=dstart)
 
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
@@ -213,13 +213,6 @@ def is_multimodal(gene,
                                                _dir,
                                                prefix=gene)
 
-            params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: " \
-                     "{b}\nmStart: {m}\ndStart: {d}".format(G=5.0,
-                                                            K=1,
-                                                            sF=2.0,
-                                                            b=bstart,
-                                                            m=mstart,
-                                                            d=dstart)
             pth = os.path.join(_dir, "PARAMS")
             with open(pth, "w") as f:
                 f.write(params)
@@ -241,7 +234,7 @@ def filter_geneset(lst,
                    min_prob_filter=None,
                    output_dir=None,
                    save_genes=False,
-                   conservative=False):
+                   sensitive=False):
     """
     Applies non-parametric mixture model to expression data. Can optionally add
     a covariate (e.g. survival, IC50) to select genes that vary with a variable of
@@ -273,7 +266,7 @@ def filter_geneset(lst,
                                                     min_prob_filter,
                                                     output_dir,
                                                     save_genes,
-                                                    conservative))
+                                                    sensitive))
         results.append(res)
 
     output = [x.get() for x in results]
@@ -313,6 +306,33 @@ def find_aliases(gss, mapper, index):
         # Remove duplicates
         gss[gs] = list(set(filtered))
     return gss
+
+
+def get_assignments(model, data):
+    """
+    Takes model and data and classifies samples
+
+    Will label samples with -1 cluster if they do not
+    fit in any of the model components
+
+    :param model:
+    :param data:
+    :return:
+    """
+    unclass = 1 - np.sum(model.allocModel.get_active_comp_probs())
+    # Get the sample assignments
+    LP = model.calc_local_params(data)
+    asnmts = []
+    for row in range(LP['resp'].shape[0]):
+        _max = np.max(LP['resp'][row, :])
+        if _max < unclass:
+            asnmts.append(-1)
+
+        else:
+            _arg = np.argmax(LP['resp'][row, :])
+            asnmts.append(_arg)
+
+    return asnmts
 
 
 def main():
@@ -373,6 +393,12 @@ def main():
                         default=False,
                         action='store_true')
 
+    parser.add_argument('--breast',
+                        help='Uses curated breast subtyping gene sets',
+                        dest='breast',
+                        default=False,
+                        action='store_true')
+
     parser.add_argument('--all-genes',
                         help='Uses all genes in expression matrix',
                         dest='all_genes',
@@ -409,8 +435,8 @@ def main():
                         type=int,
                         default=1000)
 
-    parser.add_argument('--conservative',
-                        help='Runs univariate filter in conservative mode.',
+    parser.add_argument('--sensitive',
+                        help='Runs univariate filter in sensitive mode.',
                         action='store_true')
 
     parser.add_argument('--test',
@@ -487,6 +513,9 @@ def main():
         if args.immune:
             dirs = ['immune'] + dirs
 
+        if args.breast:
+            dirs = ['breast'] + dirs
+
         sets, gs_map = get_genesets(dirs, src)
 
         if len(sets) == 0:
@@ -532,7 +561,7 @@ def main():
                                                min_prob_filter=args.min_prob_filter,
                                                output_dir=args.output_dir,
                                                save_genes=args.save_genes,
-                                               conservative=args.conservative)
+                                               sensitive=args.sensitive)
         end = len(filtered_genesets[gs])
 
         logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
@@ -581,24 +610,23 @@ def main():
                                                                                               args.num_laps))
 
         # Fit multivariate model
-        hmodel, converged = subprocess_fit(gs,
-                                           dataset,
-                                           gamma,
-                                           sF,
-                                           K,
-                                           nLap=args.num_laps)
+        hmodel, converged, params = subprocess_fit(gs,
+                                                   dataset,
+                                                   gamma,
+                                                   sF,
+                                                   K,
+                                                   nLap=args.num_laps)
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")
 
-        # Get the sample assignments
-        LP = hmodel.calc_local_params(dataset)
-        asnmts = LP['resp'].argmax(axis=1)
+        asnmts = get_assignments(hmodel, dataset)
 
         pth = os.path.join(gsdir, 'assignments.tsv')
         with open(pth, 'w') as f:
             for sample, asnmt in zip(center.columns, asnmts):
-                f.write('%s\t%s\n' % (sample, asnmt))
+                f.write('{sample}\t{assignment}\n'.format(sample=sample,
+                                                          assignment=asnmt))
 
         # Save model
         bnpy.ioutil.ModelWriter.save_model(hmodel,
@@ -606,6 +634,9 @@ def main():
                                            prefix=gs)
 
         create_notebook(src, gs, gsdir)
+
+        with open(os.path.join(gsdir, 'PARAMS'), 'w') as f:
+            f.write(params)
 
 if __name__ == '__main__':
     main()
