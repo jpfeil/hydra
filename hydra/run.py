@@ -624,6 +624,9 @@ def main():
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")
+            pth = os.path.join(gsdir, 'NOT_CONVERGED')
+            with open(pth, 'w') as f:
+                f.write("WARNING: Multivariate model did not converge!")
 
         asnmts = get_assignments(hmodel, dataset)
 

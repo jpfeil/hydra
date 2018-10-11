@@ -113,9 +113,9 @@ def subprocess_fit(name,
                                                           prefix='Best')
 
     params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: {b}\n" \
-             "mStart: {m}\ndStart: {d}\nnLap: {n}".format(G=5.0,
-                                                          K=1,
-                                                          sF=2.0,
+             "mStart: {m}\ndStart: {d}\nnLap: {n}".format(G=gamma,
+                                                          K=K,
+                                                          sF=sF,
                                                           b=bstart,
                                                           m=mstart,
                                                           d=dstart,
