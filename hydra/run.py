@@ -429,6 +429,11 @@ def main():
                         type=int,
                         default=5)
 
+    parser.add_argument('-K',
+                        help='Number of clusters to start with for multivariate clustering',
+                        type=int,
+                        default=5)
+
     parser.add_argument('--num-laps',
                         dest='num_laps',
                         help='Number of laps for VB algorithm.',
@@ -602,7 +607,7 @@ def main():
 
         # Starting with 5 cluster because starting with
         # 1 cluster biases the fit towards not finding clusters.
-        K = 5
+        K = args.K
 
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
                                                                                               sF,
