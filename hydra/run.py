@@ -326,7 +326,7 @@ def get_assignments(model, data):
     for row in range(LP['resp'].shape[0]):
         _max = np.max(LP['resp'][row, :])
         if _max < unclass:
-            asnmts.append(-1)
+            asnmts.append(np.nan)
 
         else:
             _arg = np.argmax(LP['resp'][row, :])
@@ -433,6 +433,11 @@ def main():
                         help='Number of clusters to start with for multivariate clustering',
                         type=int,
                         default=5)
+
+    parser.add_argument('--gamma',
+                        help='Prior for dirichlet dispersion parameter gamma.',
+                        type=float,
+                        default=5.0)
 
     parser.add_argument('--num-laps',
                         dest='num_laps',
@@ -600,7 +605,7 @@ def main():
         dataset = bnpy.data.XData(data)
 
         # Set the prior for creating a new cluster
-        gamma = 5.0
+        gamma = args.gamma
 
         # Start with a standard identity matrix
         sF = 1.0
