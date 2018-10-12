@@ -126,4 +126,4 @@ def subprocess_fit(name,
     else:
         print("Output:\n%s" % workdir)
 
-    return hmodel, converged, params
+    return hmodel, converged, params, stdout

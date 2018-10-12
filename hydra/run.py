@@ -159,14 +159,14 @@ def is_multimodal(gene,
     # Run the parallel fit model
     # This is parameterized to be sensitive about
     # identifying multimodally expressed distributions
-    model, converged, params = subprocess_fit(gene,
-                                              X,
-                                              gamma=5.0,
-                                              K=1,
-                                              sF=2.0,
-                                              bstart=bstart,
-                                              mstart=mstart,
-                                              dstart=dstart)
+    model, converged, params, stdout = subprocess_fit(gene,
+                                                      X,
+                                                      gamma=5.0,
+                                                      K=1,
+                                                      sF=2.0,
+                                                      bstart=bstart,
+                                                      mstart=mstart,
+                                                      dstart=dstart)
 
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
@@ -216,6 +216,10 @@ def is_multimodal(gene,
             pth = os.path.join(_dir, "PARAMS")
             with open(pth, "w") as f:
                 f.write(params)
+
+            pth = os.path.join(_dir, "STDOUT")
+            with open(pth, "w") as f:
+                f.write(stdout)
 
         analyzed[gene] = (gene, result)
         return gene, result
@@ -619,18 +623,20 @@ def main():
         # 1 cluster biases the fit towards not finding clusters.
         K = args.K
 
+        nLap = args.num_laps
+
         logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
                                                                                               sF,
                                                                                               K,
-                                                                                              args.num_laps))
+                                                                                              nLap))
 
         # Fit multivariate model
-        hmodel, converged, params = subprocess_fit(gs,
-                                                   dataset,
-                                                   gamma,
-                                                   sF,
-                                                   K,
-                                                   nLap=args.num_laps)
+        hmodel, converged, params, stdout = subprocess_fit(gs,
+                                                          dataset,
+                                                          gamma,
+                                                          sF,
+                                                          K,
+                                                          nLap=nLap)
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")
@@ -655,6 +661,9 @@ def main():
 
         with open(os.path.join(gsdir, 'PARAMS'), 'w') as f:
             f.write(params)
+
+        with open(os.path.join(gsdir, 'STDOUT'), 'w') as f:
+            f.write(stdout)
 
 if __name__ == '__main__':
     main()
