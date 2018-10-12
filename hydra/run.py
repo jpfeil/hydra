@@ -439,6 +439,11 @@ def main():
                         type=float,
                         default=5.0)
 
+    parser.add_argument('--sF',
+                        help='Prior for diagonal of covariance matrix.',
+                        type=float,
+                        default=1.0)
+
     parser.add_argument('--num-laps',
                         dest='num_laps',
                         help='Number of laps for VB algorithm.',
@@ -608,7 +613,7 @@ def main():
         gamma = args.gamma
 
         # Start with a standard identity matrix
-        sF = 1.0
+        sF = args.sF
 
         # Starting with 5 cluster because starting with
         # 1 cluster biases the fit towards not finding clusters.
