@@ -454,6 +454,12 @@ def main():
                         type=int,
                         default=1000)
 
+    parser.add_argument('--max-fit-time',
+                        dest='max_fit_time',
+                        help='Maximum number of seconds for multivariate fit before timeout',
+                        type=int,
+                        default=900)
+
     parser.add_argument('--sensitive',
                         help='Runs univariate filter in sensitive mode.',
                         action='store_true')
@@ -632,11 +638,12 @@ def main():
 
         # Fit multivariate model
         hmodel, converged, params, stdout = subprocess_fit(gs,
-                                                          dataset,
-                                                          gamma,
-                                                          sF,
-                                                          K,
-                                                          nLap=nLap)
+                                                           dataset,
+                                                           gamma,
+                                                           sF,
+                                                           K,
+                                                           nLap=nLap,
+                                                           timeout_sec=args.max_fit_time)
 
         if converged is False:
             logging.info("WARNING: Multivariate model did not converge!")

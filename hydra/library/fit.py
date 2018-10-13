@@ -102,7 +102,7 @@ def subprocess_fit(name,
                      dstart=dstart,
                      output=output_path)
 
-    stdout, _ = run(cmd, timeout_sec=timeout_sec)
+    stdout, stderr = run(cmd, timeout_sec=timeout_sec)
 
     converged = False
     m = converged_regex.search(stdout)
@@ -126,4 +126,4 @@ def subprocess_fit(name,
     else:
         print("Output:\n%s" % workdir)
 
-    return hmodel, converged, params, stdout
+    return hmodel, converged, params, stdout, stderr
