@@ -446,7 +446,7 @@ def main():
     parser.add_argument('--sF',
                         help='Prior for diagonal of covariance matrix.',
                         type=float,
-                        default=1.0)
+                        default=2.0)
 
     parser.add_argument('--num-laps',
                         dest='num_laps',

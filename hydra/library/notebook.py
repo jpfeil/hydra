@@ -140,13 +140,12 @@ pth = <PATH TO BACKGROUND EXPRESSION>
 background = pd.read_csv(pth, sep='\\t', index_col=0)
 
 assign = pd.read_csv('assignments.tsv', 
-                     sep='\
-                     \t', 
+                     sep='\\t', 
                      index_col=0, 
                      header=None)
 
-cmd = ["/usr/bin/Rscript",
-       "%s/bin/fgsea.R",
+cmd = [<PATH TO RScript>,
+       <PATH TO HYDRA INSTALLATION>/bin/fgsea.R,
        <PATH TO GENE SET FILE (.gmt)>,
        "/tmp/fgsea-analysis.rnk",
        "/tmp/fgsea-analysis.fgsea"]
@@ -177,7 +176,7 @@ for cluster, rows in assign.groupby(1):
     fgseas[cluster] = fgsea
     
     os.remove('/tmp/fgsea-analysis.rnk')
-    os.remove('/tmp/fgsea-analysis.fgsea')""" % src
+    os.remove('/tmp/fgsea-analysis.fgsea')"""
 
     nb['cells'] = [nbf.v4.new_markdown_cell(text)] + \
                   [nbf.v4.new_code_cell(x) for x in [import_statements,
