@@ -149,12 +149,14 @@ def is_multimodal(gene,
     bstart = 10
     mstart = 10
     dstart = 20
+    K = 1
 
     # Run with sensitive parameterization
-    if sensitive:
+    if sensitive is True:
         bstart = 0
         mstart = 2
         dstart = 2
+        K = 5
 
     # Run the parallel fit model
     # This is parameterized to be sensitive about
@@ -162,7 +164,7 @@ def is_multimodal(gene,
     model, converged, params, stdout = subprocess_fit(gene,
                                                       X,
                                                       gamma=5.0,
-                                                      K=1,
+                                                      K=K,
                                                       sF=2.0,
                                                       bstart=bstart,
                                                       mstart=mstart,
@@ -259,6 +261,12 @@ def filter_geneset(lst,
     """
     pool = multiprocessing.Pool(processes=CPU)
 
+
+    logger = logging.getLogger('root')
+
+    if sensitive:
+        logger.debug('SENSITIVE MODE...')
+
     results = []
     for gene in lst:
 
@@ -270,6 +278,7 @@ def filter_geneset(lst,
                                                     min_prob_filter,
                                                     output_dir,
                                                     save_genes,
+                                                    0.01,
                                                     sensitive))
         results.append(res)
 
