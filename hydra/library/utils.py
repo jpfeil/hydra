@@ -36,7 +36,13 @@ def get_genesets(dirs, src):
     for d in dirs:
         logging.info("Pulling %s gene sets:" % d)
         gs_dir = os.path.join(src, 'gene-sets', d)
-        gss = os.listdir(gs_dir)
+
+        try:
+            gss = os.listdir(gs_dir)
+
+        except ValueError:
+            raise ValueError("Gene set directory doesn't exist!")
+
         for s in gss:
             logging.info("\t%s" % s)
             gs_pth = os.path.join(gs_dir, s)

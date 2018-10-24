@@ -681,5 +681,6 @@ def main():
         with open(os.path.join(gsdir, 'STDOUT'), 'w') as f:
             f.write(stdout)
 
+
 if __name__ == '__main__':
     main()
