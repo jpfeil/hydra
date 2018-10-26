@@ -150,6 +150,7 @@ def is_multimodal(gene,
     mstart = 10
     dstart = 20
     K = 1
+    sF = 2.0
 
     # Run with sensitive parameterization
     if sensitive is True:
@@ -157,6 +158,7 @@ def is_multimodal(gene,
         mstart = 2
         dstart = 2
         K = 5
+        sF = 1.0
 
     # Run the parallel fit model
     # This is parameterized to be sensitive about
@@ -165,7 +167,7 @@ def is_multimodal(gene,
                                                       X,
                                                       gamma=5.0,
                                                       K=K,
-                                                      sF=2.0,
+                                                      sF=sF,
                                                       bstart=bstart,
                                                       mstart=mstart,
                                                       dstart=dstart)
