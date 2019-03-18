@@ -1,4 +1,5 @@
 FROM ubuntu:16.04
+FROM r-base
 
 MAINTAINER Jacob Pfeil, jpfeil@ucsc.edu
 
@@ -18,13 +19,19 @@ RUN conda update -y conda
 
 RUN conda install -y seaborn numpy pandas scipy jupyter 
 
+COPY hydra/bin/install.R /opt/
+RUN Rscript /opt/install.R
+
 WORKDIR /opt
-RUN git clone https://github.com/bnpy/bnpy.git
+RUN pip install munkres==1.0.11
+RUN git clone https://github.com/s-mawjee/bnpy.git
 RUN cd /opt/bnpy/ && pip install -e .
 
 COPY hydra /opt/hydra
 
 ENV HYDRA_SRC=/opt/hydra
+
+RUN export PYTHONPATH="$PYTHONPATH:/opt/hydra/library"
 
 WORKDIR /data
 

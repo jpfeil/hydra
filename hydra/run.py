@@ -349,6 +349,13 @@ def get_assignments(model, data):
 
     return asnmts
 
+def run_notebook():
+    import subprocess
+    p = subprocess.check_call(['jupyter',
+                               'notebook',
+                               '--allow-root',
+                               '--ip', '0.0.0.0',
+                               '--no-browser'])
 
 def main():
     """
@@ -359,6 +366,9 @@ def main():
     noise to the variant status.
     """
     parser = argparse.ArgumentParser(description=main.__doc__)
+
+    parser.add_argument('mode',
+                        help='run - starts pipeline\nnotebook - spins up jupyter notebook')
 
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
@@ -487,6 +497,9 @@ def main():
 
     args = parser.parse_args()
 
+    if args.mode == 'notebook':
+        run_notebook()
+
     # Make the output directory if it doesn't already exist
     mkdir_p(args.output_dir)
 
@@ -516,9 +529,16 @@ def main():
     logging.info("Removing duplicate genes:")
     matrx = matrx[~matrx.index.duplicated(keep='first')]
 
+    drop_genes = set()
     for gene in matrx.index:
         if '/' in gene:
-            raise ValueError("Gene names cannot contain forward slashes!")
+            logging.info("Gene names cannot contain forward slashes!")
+            drop_genes.add(gene)
+        if "'" in gene or "\"" in gene:
+            logging.info("Gene names cannot contain quotation marks!")
+            drop_genes.add(gene)
+
+    matrx = matrx.drop(list(drop_genes), axis=0)
 
     # Determine which gene sets are included.
     if args.test:
