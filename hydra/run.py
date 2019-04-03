@@ -1,15 +1,17 @@
 #!/usr/bin/env python2.7
 import argparse
 import bnpy
-import os
 import logging
 import multiprocessing
 import numpy as np
+import os
 import pandas as pd
+import re
 
 from collections import defaultdict
 from scipy.stats import kruskal
 
+from library.analysis import EnrichmentAnalysis, MultivariateMixtureModel
 from library.fit import subprocess_fit
 from library.utils import mkdir_p, get_genesets, get_test_genesets, read_genesets
 from library.notebook import create_notebook
@@ -357,6 +359,175 @@ def run_notebook():
                                '--ip', '0.0.0.0',
                                '--no-browser'])
 
+def apply_multivariate_model(input, args, output, name='MultivariateModel'):
+    # Center data to make inference easier
+
+    logging.info("Centering input to multivariate clustering.")
+    center = input.apply(lambda x: x - x.mean(), axis=1)
+
+    # Need to take the transpose
+    # Samples x Genes
+    data = center.T.values
+
+    # Create dataset object for inference
+    dataset = bnpy.data.XData(data)
+
+    # Set the prior for creating a new cluster
+    gamma = args.gamma
+
+    # Start with a standard identity matrix
+    sF = args.sF
+
+    # Starting with 5 cluster because starting with
+    # 1 cluster biases the fit towards not finding clusters.
+    K = args.K
+
+    nLap = args.num_laps
+
+    logging.info("Multivariate Model Params:\n"
+                 "gamma: %.2f\n"
+                 "sF: %.2f\n"
+                 "K: %d\n"
+                 "nLaps: %d" % (gamma, sF, K, nLap))
+
+    # Fit multivariate model
+    hmodel, converged, params, stdout = subprocess_fit(name,
+                                                       dataset,
+                                                       gamma,
+                                                       sF,
+                                                       K,
+                                                       nLap=nLap,
+                                                       timeout_sec=args.max_fit_time)
+
+    if converged is False:
+        logging.info("WARNING: Multivariate model did not converge!")
+        pth = os.path.join(output, 'NOT_CONVERGED')
+        with open(pth, 'w') as f:
+            f.write("WARNING: Multivariate model did not converge!")
+
+    asnmts = get_assignments(hmodel, dataset)
+
+    pth = os.path.join(output, 'assignments.tsv')
+    with open(pth, 'w') as f:
+        for sample, asnmt in zip(center.columns, asnmts):
+            f.write('{sample}\t{assignment}\n'.format(sample=sample,
+                                                      assignment=asnmt))
+
+    # Save model
+    bnpy.ioutil.ModelWriter.save_model(hmodel,
+                                       output,
+                                       prefix=name)
+
+    create_notebook(src, name, output)
+
+    with open(os.path.join(output, 'PARAMS'), 'w') as f:
+        f.write(params)
+
+    with open(os.path.join(output, 'STDOUT'), 'w') as f:
+        f.write(stdout)
+
+
+def gene_set_clustering(genesets, matrx, args, covariate=None):
+    """
+    Iterate over the gene sets and select for multimodally expressed genes
+
+    :param genesets:
+    :param matrx:
+    :param args:
+    :param covariate:
+    :return:
+    """
+    if args.regex:
+        regex = re.compile(args.regex)
+
+    filtered_genesets = defaultdict(set)
+    for gs, genes in genesets.items():
+        if args.regex and not regex.match(gs):
+            logging.info("Regex Filter: %s" % gs)
+            continue
+
+        start = len(genes)
+        filtered_genesets[gs] = filter_geneset(list(genes),
+                                               matrx,
+                                               covariate=covariate,
+                                               CPU=args.CPU,
+                                               gene_mean_filter=args.min_mean_filter,
+                                               min_prob_filter=args.min_prob_filter,
+                                               output_dir=args.output_dir,
+                                               save_genes=args.save_genes,
+                                               sensitive=args.sensitive)
+        end = len(filtered_genesets[gs])
+
+        logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
+                                                                         x=start,
+                                                                         y=end))
+        if end < args.min_num_filter:
+            logging.info("Skipping {gs} because there "
+                         "are not enough genes to cluster".format(gs=gs))
+            continue
+
+        # Make directory for output
+        gsdir = os.path.join(args.output_dir, 'OUTPUT', gs)
+        mkdir_p(gsdir)
+
+        # Create training data for the model fit
+        training = matrx.loc[filtered_genesets[gs], :]
+
+        # Save the expression data for future analysis
+        pth = os.path.join(gsdir, 'training-data.tsv')
+        training.to_csv(pth, sep='\t')
+
+        apply_multivariate_model(training, args, gsdir, gs)
+
+
+def enrichment_analysis(matrx, args, GO=False, covariate=None):
+
+    genes = matrx.index.values
+    start = len(genes)
+    modal = filter_geneset(list(genes),
+                           matrx,
+                           covariate=covariate,
+                           CPU=args.CPU,
+                           gene_mean_filter=args.min_mean_filter,
+                           min_prob_filter=args.min_prob_filter,
+                           output_dir=args.output_dir,
+                           save_genes=args.save_genes,
+                           sensitive=args.sensitive)
+    end = len(modal)
+
+    logging.info("Filtering: went from {x} to {y} genes".format(x=start,
+                                                                y=end))
+
+    mm_genes = os.path.join(args.output_dir, 'MultiModal')
+
+    post = EnrichmentAnalysis(mm_genes,
+                              args.expression,
+                              args.min_prob_filter,
+                              gmt=args.gmt)
+
+    output = os.path.join(args.output_dir, 'EnrichmentAnalysis')
+    os.mkdir(output)
+
+    terms = post.get_enriched_terms()
+
+    if terms.shape[0] == 0:
+        logging.info("No enriched terms were found!\n"
+                     "Try decreasing the min-prob-filter parameter.\n"
+                     "Repeat enrichment analysis using jupyter notebook")
+        return
+
+    else:
+        pth = os.path.join(output, 'EnrichedTerms')
+        terms.to_csv(pth, sep='\t')
+
+    training = matrx.reindex(post.get_enriched_term_genes())
+
+    pth = os.path.join(output, 'training-data.tsv')
+    training.to_csv(pth, sep='\t')
+
+    apply_multivariate_model(training, args, output)
+
+
 def main():
     """
     Fits non-parametric mixture models to expression data. Can add a covariate to filter
@@ -368,64 +539,29 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument('mode',
-                        help='run - starts pipeline\nnotebook - spins up jupyter notebook')
+                        help='run - starts clustering pipeline\nnotebook - spins up jupyter notebook')
 
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
                         required=True)
 
-    parser.add_argument('-v', '--variants',
-                        help='Variant identifier by sample matrix.\nName must be distinct from expression.',
+    parser.add_argument('--go-enrichment',
+                        help='Performs GO enrichment analysis using gene set database',
+                        dest='go_enrichment',
+                        action='store_true',
                         required=False)
 
-    parser.add_argument('-c', '--covariate',
-                        help='sample X covariate matrix. There must be a row "keep" that specifies whether to keep '
-                             'or remove genes that correlate with variable using a boolean. 1: keep. 0: remove.',
+    parser.add_argument('--enrichment',
+                        help='Performs enrichment analysis using gene set database',
+                        action='store_true',
                         required=False)
 
-    parser.add_argument('--CPU',
-                        dest='CPU',
-                        type=int,
-                        default=1)
-
-    parser.add_argument('--hallmark',
-                        help='Uses hallmark gene sets',
-                        dest='hallmark',
-                        default=False,
-                        action='store_true')
-
-    parser.add_argument('--msigdb',
-                        help='Uses MSigDB gene sets',
-                        dest='msigdb',
-                        default=False,
-                        action='store_true')
-
-    parser.add_argument('--reactome',
-                        help='Uses Reactome gene sets',
-                        dest='reactome',
-                        default=False,
-                        action='store_true')
-
-    parser.add_argument('--treehouse',
-                        help='Uses Treehouse gene sets',
-                        dest='treehouse',
-                        default=False,
-                        action='store_true')
-
-    parser.add_argument('--immune',
-                        help='Uses curated immune gene sets',
-                        dest='immune',
-                        default=False,
-                        action='store_true')
-
-    parser.add_argument('--breast',
-                        help='Uses curated breast subtyping gene sets',
-                        dest='breast',
-                        default=False,
-                        action='store_true')
+    parser.add_argument('--gmt',
+                        help='Gene set database in GMT format.',
+                        required=True)
 
     parser.add_argument('--all-genes',
-                        help='Uses all genes in expression matrix',
+                        help='Uses all multimodal genes in expression matrix',
                         dest='all_genes',
                         default=False,
                         action='store_true')
@@ -433,18 +569,20 @@ def main():
     parser.add_argument('--save-genes',
                         help='Saves multimodal gene fits',
                         dest='save_genes',
-                        default=False,
+                        default=True,
                         action='store_true')
 
     parser.add_argument('--min-mean-filter',
                         dest='min_mean_filter',
-                        help='Removes genes with an average expression below value.',
+                        help='Removes genes with an average expression below value.'
+                             'Used in gene-wise clustering step.',
                         type=float,
                         default=None)
 
     parser.add_argument('--min-prob-filter',
                         dest='min_prob_filter',
-                        help='Removes genes with a minor component less than value.',
+                        help='Removes genes with a minor component less than value. '
+                             'Used in gene-wise clustering step.',
                         type=float,
                         default=None)
 
@@ -485,15 +623,33 @@ def main():
                         help='Runs univariate filter in sensitive mode.',
                         action='store_true')
 
+    parser.add_argument('--output-dir',
+                        dest='output_dir',
+                        default='hydra-out')
+
+    parser.add_argument('--CPU',
+                        dest='CPU',
+                        type=int,
+                        default=1)
+
     parser.add_argument('--test',
                         action='store_true')
 
     parser.add_argument('--debug',
                         action='store_true')
 
-    parser.add_argument('--output-dir',
-                        dest='output_dir',
-                        default='hydra-out')
+    parser.add_argument('-v', '--variants',
+                        help='Variant identifier by sample matrix.\nName must be distinct from expression.',
+                        required=False)
+
+    parser.add_argument('-c', '--covariate',
+                        help='sample X covariate matrix. There must be a row "keep" that specifies whether to keep '
+                             'or remove genes that correlate with variable using a boolean. 1: keep. 0: remove.',
+                        required=False)
+
+    parser.add_argument('--gmt-regex',
+                        help='Regex for subsetting gmt file',
+                        required=True)
 
     args = parser.parse_args()
 
@@ -527,13 +683,16 @@ def main():
 
     # Remove duplicates in index
     logging.info("Removing duplicate genes:")
+    logging.info("Number of genes: %d" % matrx.shape[0])
     matrx = matrx[~matrx.index.duplicated(keep='first')]
+    logging.info("Number of genes after removing duplicates: %d" % matrx.shape[0])
 
     drop_genes = set()
     for gene in matrx.index:
         if '/' in gene:
             logging.info("Gene names cannot contain forward slashes!")
             drop_genes.add(gene)
+
         if "'" in gene or "\"" in gene:
             logging.info("Gene names cannot contain quotation marks!")
             drop_genes.add(gene)
@@ -543,41 +702,18 @@ def main():
     # Determine which gene sets are included.
     if args.test:
         logging.info("Loading debug gene sets...")
-        sets, gs_map = get_test_genesets(src)
+        sets, _ = get_test_genesets(src)
         genesets = read_genesets(sets)
 
     elif args.all_genes:
         logging.info("Creating ALL_GENES gene set...")
-        gs_map = {'ALL_GENES': 'ALL_GENES' }
         genesets = {'ALL_GENES': set(matrx.index.values)}
 
     else:
-        dirs = ['misc']
+        genesets = get_genesets(args.gmt)
 
-        if args.msigdb:
-            dirs = ['msigdb'] + dirs
-
-        if args.reactome:
-            dirs = ['reactome'] + dirs
-
-        if args.hallmark:
-            dirs = ['hallmark'] + dirs
-
-        if args.treehouse:
-            dirs = ['treehouse'] + dirs
-
-        if args.immune:
-            dirs = ['immune'] + dirs
-
-        if args.breast:
-            dirs = ['breast'] + dirs
-
-        sets, gs_map = get_genesets(dirs, src)
-
-        if len(sets) == 0:
+        if len(genesets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
-
-        genesets = read_genesets(sets)
 
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
@@ -604,104 +740,19 @@ def main():
         #
         covariate.loc['keep', :] = covariate.loc['keep', :].astype('bool')
 
-    # Iterate over the gene sets and select for multimodally expressed genes
-    filtered_genesets = defaultdict(set)
-    for gs, genes in genesets.items():
+    if args.enrichment:
+        logging.info("Starting unsupervised enrichment analysis:\n%s" % args.gmt)
+        enrichment_analysis(matrx, args, covariate=covariate)
 
-        start = len(genes)
-        filtered_genesets[gs] = filter_geneset(list(genes),
-                                               matrx,
-                                               covariate=covariate,
-                                               CPU=args.CPU,
-                                               gene_mean_filter=args.min_mean_filter,
-                                               min_prob_filter=args.min_prob_filter,
-                                               output_dir=args.output_dir,
-                                               save_genes=args.save_genes,
-                                               sensitive=args.sensitive)
-        end = len(filtered_genesets[gs])
+    elif args.go_enrichment:
+        logging.info("Starting unsupervised enrichment analysis using clusterProfiler GO analysis")
+        args.gmt = "GO"
+        enrichment_analysis(matrx, args, covariate=covariate)
 
-        logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
-                                                                         x=start,
-                                                                         y=end))
-        if end < args.min_num_filter:
-            logging.info("Skipping {gs} because there are not enough genes to cluster".format(gs=gs))
-            continue
+    else:
+        logging.info("Starting gene set clustering analysis:\n%s" % args.gmt)
+        gene_set_clustering(genesets, matrx, args, covariate)
 
-        gs_root = gs_map[gs]
-
-        # Make directory for output
-        gsdir = os.path.join(args.output_dir, gs_root, gs)
-        mkdir_p(gsdir)
-
-        # Create training data for the model fit
-        training = matrx.loc[filtered_genesets[gs], :]
-
-        # Save the expression data for future analysis
-        pth = os.path.join(gsdir, 'training-data.tsv')
-        training.to_csv(pth, sep='\t')
-
-        # Center data to make inference easier
-        center = training.apply(lambda x: x - x.mean(), axis=1)
-
-        # Need to take the transpose
-        # Samples x Genes
-        data = center.T.values
-
-        # Create dataset object for inference
-        dataset = bnpy.data.XData(data)
-
-        # Set the prior for creating a new cluster
-        gamma = args.gamma
-
-        # Start with a standard identity matrix
-        sF = args.sF
-
-        # Starting with 5 cluster because starting with
-        # 1 cluster biases the fit towards not finding clusters.
-        K = args.K
-
-        nLap = args.num_laps
-
-        logging.info("Multivariate Model Params:\ngamma: %.2f\nsF: %.2f\nK: %d\nnLaps: %d" % (gamma,
-                                                                                              sF,
-                                                                                              K,
-                                                                                              nLap))
-
-        # Fit multivariate model
-        hmodel, converged, params, stdout = subprocess_fit(gs,
-                                                           dataset,
-                                                           gamma,
-                                                           sF,
-                                                           K,
-                                                           nLap=nLap,
-                                                           timeout_sec=args.max_fit_time)
-
-        if converged is False:
-            logging.info("WARNING: Multivariate model did not converge!")
-            pth = os.path.join(gsdir, 'NOT_CONVERGED')
-            with open(pth, 'w') as f:
-                f.write("WARNING: Multivariate model did not converge!")
-
-        asnmts = get_assignments(hmodel, dataset)
-
-        pth = os.path.join(gsdir, 'assignments.tsv')
-        with open(pth, 'w') as f:
-            for sample, asnmt in zip(center.columns, asnmts):
-                f.write('{sample}\t{assignment}\n'.format(sample=sample,
-                                                          assignment=asnmt))
-
-        # Save model
-        bnpy.ioutil.ModelWriter.save_model(hmodel,
-                                           gsdir,
-                                           prefix=gs)
-
-        create_notebook(src, gs, gsdir)
-
-        with open(os.path.join(gsdir, 'PARAMS'), 'w') as f:
-            f.write(params)
-
-        with open(os.path.join(gsdir, 'STDOUT'), 'w') as f:
-            f.write(stdout)
 
 
 if __name__ == '__main__':

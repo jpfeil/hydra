@@ -1,0 +1,5 @@
+source("https://bioconductor.org/biocLite.R")
+biocLite("clusterProfiler")
+biocLite("ConsensusClusterPlus")
+biocLite("M3C")
+biocLite("org.Hs.eg.db")

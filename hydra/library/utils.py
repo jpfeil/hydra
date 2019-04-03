@@ -20,33 +20,27 @@ def mkdir_p(path):
             raise
 
 
-def get_genesets(dirs, src):
+def get_genesets(gmt):
     """
     Formats the paths to the gene set files
 
-    :param list dirs: Gene set directories
-    :return: Path to gene set files
-    :rtype: list
+    :param gmt: Path to gene set database in GMT format
+    :return: dictionary of gene sets
+    :rtype: defaultdict(set)
     """
-    pths = []
-    gs_map = {}
-    for d in dirs:
-        logging.info("Pulling %s gene sets:" % d)
-        gs_dir = os.path.join(src, 'gene-sets', d)
+    genesets = {}
 
-        try:
-            gss = os.listdir(gs_dir)
+    if not os.path.exists(gmt):
+        raise ValueError('Cannot locate GMT file: %s' % gmt)
 
-        except ValueError:
-            raise ValueError("Gene set directory doesn't exist!")
-
-        for s in gss:
-            logging.info("\t%s" % s)
-            gs_pth = os.path.join(gs_dir, s)
-            pths.append(gs_pth)
-            gs_map[s] =  d
-
-    return pths, gs_map
+    with open(gmt) as f:
+        for line in f:
+            fields = line.strip().split('\t')
+            name = fields[0]
+            logging.info("Loading gene set: %s" % name)
+            genes = fields[2:]
+            genesets[name] = set(genes)
+    return genesets
 
 
 def get_test_genesets(src):
