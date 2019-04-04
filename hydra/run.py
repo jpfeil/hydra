@@ -1,12 +1,12 @@
 #!/usr/bin/env python2.7
 import argparse
 import bnpy
+import datetime
 import logging
 import multiprocessing
 import numpy as np
 import os
 import pandas as pd
-import re
 
 from collections import defaultdict
 from scipy.stats import kruskal
@@ -16,6 +16,7 @@ from library.fit import subprocess_fit
 from library.utils import mkdir_p, get_genesets, get_test_genesets, read_genesets
 from library.notebook import create_notebook
 
+date = str(datetime.date.today())
 
 src = os.path.dirname(os.path.abspath(__file__))
 
@@ -90,7 +91,8 @@ def distinct_covariates(gene, data, model, covariate, keep=None, alpha=0.01, deb
 
 
 # Global variable for keeping track of multimodally expressed genes
-analyzed = {}
+manager = multiprocessing.Manager()
+analyzed = manager.dict()
 
 
 def is_multimodal(gene,
@@ -427,6 +429,35 @@ def apply_multivariate_model(input, args, output, name='MultivariateModel'):
         f.write(stdout)
 
 
+def run_filter_gene_set(genesets, matrx, args, covariate=None):
+    filtered_genesets = defaultdict(set)
+    for gs, genes in genesets.items():
+
+        start = len(genes)
+        res = filter_geneset(list(genes),
+                             matrx,
+                             covariate=covariate,
+                             CPU=args.CPU,
+                             gene_mean_filter=args.min_mean_filter,
+                             min_prob_filter=args.min_prob_filter,
+                             output_dir=args.output_dir,
+                             save_genes=args.save_genes,
+                             sensitive=args.sensitive)
+        end = len(res)
+
+        logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
+                                                                         x=start,
+                                                                         y=end))
+        if end < args.min_num_filter:
+            logging.info("Skipping {gs} because there "
+                         "are not enough genes to cluster".format(gs=gs))
+            continue
+
+        filtered_genesets[gs] = res
+
+    return filtered_genesets
+
+
 def gene_set_clustering(genesets, matrx, args, covariate=None):
     """
     Iterate over the gene sets and select for multimodally expressed genes
@@ -437,41 +468,15 @@ def gene_set_clustering(genesets, matrx, args, covariate=None):
     :param covariate:
     :return:
     """
-    if args.regex:
-        regex = re.compile(args.regex)
 
-    filtered_genesets = defaultdict(set)
-    for gs, genes in genesets.items():
-        if args.regex and not regex.match(gs):
-            logging.info("Regex Filter: %s" % gs)
-            continue
-
-        start = len(genes)
-        filtered_genesets[gs] = filter_geneset(list(genes),
-                                               matrx,
-                                               covariate=covariate,
-                                               CPU=args.CPU,
-                                               gene_mean_filter=args.min_mean_filter,
-                                               min_prob_filter=args.min_prob_filter,
-                                               output_dir=args.output_dir,
-                                               save_genes=args.save_genes,
-                                               sensitive=args.sensitive)
-        end = len(filtered_genesets[gs])
-
-        logging.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
-                                                                         x=start,
-                                                                         y=end))
-        if end < args.min_num_filter:
-            logging.info("Skipping {gs} because there "
-                         "are not enough genes to cluster".format(gs=gs))
-            continue
-
+    filtered_genesets = run_filter_gene_set(genesets, matrx, args, covariate)
+    for gs, genes in filtered_genesets.items():
         # Make directory for output
         gsdir = os.path.join(args.output_dir, 'OUTPUT', gs)
         mkdir_p(gsdir)
 
         # Create training data for the model fit
-        training = matrx.loc[filtered_genesets[gs], :]
+        training = matrx.reindex(genes)
 
         # Save the expression data for future analysis
         pth = os.path.join(gsdir, 'training-data.tsv')
@@ -480,33 +485,27 @@ def gene_set_clustering(genesets, matrx, args, covariate=None):
         apply_multivariate_model(training, args, gsdir, gs)
 
 
-def enrichment_analysis(matrx, args, GO=False, covariate=None):
+def enrichment_analysis(matrx, args, covariate=None, reanalysis=False):
+
+    assert args.save_genes is True, 'Need to save genes for enrichment analysis'
 
     genes = matrx.index.values
-    start = len(genes)
-    modal = filter_geneset(list(genes),
-                           matrx,
-                           covariate=covariate,
-                           CPU=args.CPU,
-                           gene_mean_filter=args.min_mean_filter,
-                           min_prob_filter=args.min_prob_filter,
-                           output_dir=args.output_dir,
-                           save_genes=args.save_genes,
-                           sensitive=args.sensitive)
-    end = len(modal)
+    genesets = {'AllGenes': genes}
 
-    logging.info("Filtering: went from {x} to {y} genes".format(x=start,
-                                                                y=end))
+    if not reanalysis:
+        _ = run_filter_gene_set(genesets, matrx, args, covariate)
+        mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
 
-    mm_genes = os.path.join(args.output_dir, 'MultiModal')
+    else:
+        mm_genes = reanalysis
 
     post = EnrichmentAnalysis(mm_genes,
                               args.expression,
                               args.min_prob_filter,
                               gmt=args.gmt)
 
-    output = os.path.join(args.output_dir, 'EnrichmentAnalysis')
-    os.mkdir(output)
+    output = os.path.join(args.output_dir, 'EnrichmentAnalysis', date)
+    mkdir_p(output)
 
     terms = post.get_enriched_terms()
 
@@ -539,7 +538,9 @@ def main():
     parser = argparse.ArgumentParser(description=main.__doc__)
 
     parser.add_argument('mode',
-                        help='run - starts clustering pipeline\nnotebook - spins up jupyter notebook')
+                        help='run - starts clustering pipeline\n'
+                             'notebook - spins up jupyter notebook\n'
+                             'reanalyze - repeats multivariate clustering')
 
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
@@ -558,7 +559,7 @@ def main():
 
     parser.add_argument('--gmt',
                         help='Gene set database in GMT format.',
-                        required=True)
+                        required=False)
 
     parser.add_argument('--all-genes',
                         help='Uses all multimodal genes in expression matrix',
@@ -648,13 +649,23 @@ def main():
                         required=False)
 
     parser.add_argument('--gmt-regex',
+                        dest='gmt_regex',
                         help='Regex for subsetting gmt file',
-                        required=True)
+                        required=False)
+
+    parser.add_argument('--mm-path',
+                        dest='mm_path',
+                        help='Path to MultiModal directory for reanalysis',
+                        required=False)
 
     args = parser.parse_args()
 
     if args.mode == 'notebook':
         run_notebook()
+
+    elif args.mode == 'reanalyze':
+        raise NotImplementedError
+
 
     # Make the output directory if it doesn't already exist
     mkdir_p(args.output_dir)
@@ -698,22 +709,25 @@ def main():
             drop_genes.add(gene)
 
     matrx = matrx.drop(list(drop_genes), axis=0)
+    logging.info("Number of genes after "
+                 "removing misformatted genes: %d" % matrx.shape[0])
 
     # Determine which gene sets are included.
     if args.test:
         logging.info("Loading debug gene sets...")
         sets, _ = get_test_genesets(src)
         genesets = read_genesets(sets)
+        args.gmt = 'TEST'
 
-    elif args.all_genes:
-        logging.info("Creating ALL_GENES gene set...")
-        genesets = {'ALL_GENES': set(matrx.index.values)}
-
-    else:
-        genesets = get_genesets(args.gmt)
+    elif args.gmt:
+        genesets = get_genesets(args.gmt, args.gmt_regex)
 
         if len(genesets) == 0:
             raise ValueError("Need to specify gene sets for analysis.")
+
+    else:
+        logging.warn("No gene set database given.")
+        genesets = {'ALL_GENES': set(matrx.index.values)}
 
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
@@ -741,13 +755,14 @@ def main():
         covariate.loc['keep', :] = covariate.loc['keep', :].astype('bool')
 
     if args.enrichment:
+        assert args.gmt is not None, "Need GMT file for enrichment analysis"
         logging.info("Starting unsupervised enrichment analysis:\n%s" % args.gmt)
-        enrichment_analysis(matrx, args, covariate=covariate)
+        enrichment_analysis(matrx, args, covariate=covariate, reanalysis=args.mm_path)
 
     elif args.go_enrichment:
         logging.info("Starting unsupervised enrichment analysis using clusterProfiler GO analysis")
         args.gmt = "GO"
-        enrichment_analysis(matrx, args, covariate=covariate)
+        enrichment_analysis(matrx, args, covariate=covariate, reanalysis=args.mm_path)
 
     else:
         logging.info("Starting gene set clustering analysis:\n%s" % args.gmt)

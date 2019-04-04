@@ -4,10 +4,8 @@ require(clusterProfiler)
 args <- commandArgs(trailingOnly=T)
 
 mm <- read.table(args[1], header=F)
-head(mm)
 
 bb <- read.table(args[2], header=F)
-head(bb)
 
 gene_map <- bitr(mm$V1,
                  fromType='SYMBOL',

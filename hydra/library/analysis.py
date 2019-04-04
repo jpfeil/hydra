@@ -15,7 +15,7 @@ from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, cophenet, linkage, dendrogram
 from scipy.spatial.distance import pdist
 
-from library.fit import subprocess_fit
+from library.fit import subprocess_fit, run
 
 src = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -127,10 +127,12 @@ class EnrichmentAnalysis(object):
             raise ValueError("Can't find GMT file:\n%s" % self.gmt)
 
         try:
-            subprocess.check_call(cmd)
+            stdout, stderr = run(cmd)
 
         except subprocess.CalledProcessError:
             print ' '.join(cmd)
+            print stdout
+            print stderr
             raise
 
         return pd.read_csv(res)
@@ -249,7 +251,7 @@ class HClust(object):
 
         self.col_linkage = hierarchy.linkage(
              distance.pdist(zscore.values.T),
-             method=method, metric=metric);
+             method=method, metric=metric)
 
     def plot_row_linkage(self, dist):
         """
@@ -376,13 +378,18 @@ def fancy_dendrogram(*args, **kwargs):
     return ddata
 
 
-def n1(zscore):
+def n1(zscore, gmt=None):
     rnk_temp = os.path.join(tempfile.gettempdir(), 'RNK' + str(uuid.uuid4()))
     fgsea_temp = os.path.join(tempfile.gettempdir(), 'FGSEA' + str(uuid.uuid4()))
 
+    if gmt is None:
+        gmt = os.path.join(src,
+                           'data',
+                           'Human_GO_AllPathways_no_GO_iea_October_01_2018_symbol.gmt')
+
     cmd = ['Rscript',
            os.path.join(src, 'bin', 'fgsea.R'),
-           os.path.join(src, 'data', 'Human_GO_AllPathways_no_GO_iea_October_01_2018_symbol.gmt'),
+           gmt,
            rnk_temp,
            fgsea_temp]
 

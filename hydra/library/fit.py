@@ -20,14 +20,14 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def run(cmd, timeout_sec):
+def run(cmd, timeout_sec=900):
     """
     https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
     :param cmd:
     :param timeout_sec:
     :return:
     """
-    proc = Popen(shlex.split(cmd), stdout=PIPE, stderr=PIPE)
+    proc = Popen(cmd, stdout=PIPE, stderr=PIPE)
     timer = Timer(timeout_sec, proc.kill)
 
     try:
@@ -102,7 +102,7 @@ def subprocess_fit(name,
                      dstart=dstart,
                      output=output_path)
 
-    stdout, stderr = run(cmd, timeout_sec=timeout_sec)
+    stdout, stderr = run(shlex.split(cmd), timeout_sec=timeout_sec)
 
     converged = False
     m = converged_regex.search(stdout)

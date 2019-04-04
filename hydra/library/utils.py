@@ -1,6 +1,7 @@
 import logging
 import errno
 import os
+import re
 
 from collections import defaultdict
 
@@ -20,7 +21,7 @@ def mkdir_p(path):
             raise
 
 
-def get_genesets(gmt):
+def get_genesets(gmt, gmt_regex=None):
     """
     Formats the paths to the gene set files
 
@@ -28,15 +29,23 @@ def get_genesets(gmt):
     :return: dictionary of gene sets
     :rtype: defaultdict(set)
     """
-    genesets = {}
-
     if not os.path.exists(gmt):
         raise ValueError('Cannot locate GMT file: %s' % gmt)
+
+    genesets = {}
+
+    logging.info('GMT Regex: %s' % gmt_regex)
+
+    if gmt_regex:
+        regex = re.compile(gmt_regex)
 
     with open(gmt) as f:
         for line in f:
             fields = line.strip().split('\t')
             name = fields[0]
+            # Skip gene sets that do not match regex
+            if gmt_regex and not regex.search(name):
+                continue
             logging.info("Loading gene set: %s" % name)
             genes = fields[2:]
             genesets[name] = set(genes)
