@@ -41,6 +41,7 @@ class EnrichmentAnalysis(object):
 
         self.exp = pd.read_csv(exp_path, sep='\t', index_col=0)
         self.background = list(self.exp.index.values)
+        print "Background: ", len(self.background)
 
         self.mm_path = mm_path
         self.min_comp_filter = min_comp_filter
@@ -72,6 +73,7 @@ class EnrichmentAnalysis(object):
                 continue
 
             mm.add(gene)
+        print 'Found %d multimodal genes' % len(mm)
         return list(mm)
 
     def _recommend_min_comp(self, variance=0.15):
@@ -127,12 +129,11 @@ class EnrichmentAnalysis(object):
             raise ValueError("Can't find GMT file:\n%s" % self.gmt)
 
         try:
+            print ' '.join(cmd)
             stdout, stderr = run(cmd)
 
         except subprocess.CalledProcessError:
             print ' '.join(cmd)
-            print stdout
-            print stderr
             raise
 
         return pd.read_csv(res)

@@ -1,5 +1,6 @@
 require(org.Hs.eg.db)
 require(clusterProfiler)
+require(DOSE)
 
 args <- commandArgs(trailingOnly=T)
 
@@ -25,7 +26,7 @@ res <- enricher(gene=gene_map$ENTREZID,
                  pAdjustMethod = 'BH',
                  qvalueCutoff = 0.01)
 
-res <- setReadable(hall, 
+res <- setReadable(res, 
                    keytype='ENTREZID',
                    OrgDb = org.Hs.eg.db)
 

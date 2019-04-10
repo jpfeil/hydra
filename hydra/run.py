@@ -472,7 +472,7 @@ def gene_set_clustering(genesets, matrx, args, covariate=None):
     filtered_genesets = run_filter_gene_set(genesets, matrx, args, covariate)
     for gs, genes in filtered_genesets.items():
         # Make directory for output
-        gsdir = os.path.join(args.output_dir, 'OUTPUT', gs)
+        gsdir = os.path.join(args.output_dir, 'MultivariateAnalysis', gs)
         mkdir_p(gsdir)
 
         # Create training data for the model fit
@@ -492,7 +492,7 @@ def enrichment_analysis(matrx, args, covariate=None, reanalysis=False):
     genes = matrx.index.values
     genesets = {'AllGenes': genes}
 
-    if not reanalysis:
+    if reanalysis == False:
         _ = run_filter_gene_set(genesets, matrx, args, covariate)
         mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
 
