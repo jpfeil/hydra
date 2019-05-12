@@ -5,9 +5,13 @@ import tempfile
 import shutil
 import shlex
 import sys
+import numpy as np
+import logging
 
 from subprocess import Popen, PIPE
 from threading import Timer
+
+from library.notebook import create_notebook
 
 
 # Disable
@@ -127,3 +131,106 @@ def subprocess_fit(name,
         print("Output:\n%s" % workdir)
 
     return hmodel, converged, params, stdout
+
+
+def get_assignments(model, data):
+    """
+    Takes model and data and classifies samples
+
+    Will label samples with NaN if they do not
+    fit in any of the model components
+
+    :param model:
+    :param data:
+    :return:
+    """
+    unclass = 1 - np.sum(model.allocModel.get_active_comp_probs())
+    # Get the sample assignments
+    LP = model.calc_local_params(data)
+    asnmts = []
+    for row in range(LP['resp'].shape[0]):
+        _max = np.max(LP['resp'][row, :])
+        if _max < unclass:
+            asnmts.append(np.nan)
+
+        else:
+            _arg = np.argmax(LP['resp'][row, :])
+            asnmts.append(_arg)
+
+    return asnmts
+
+
+def apply_multivariate_model(input, args, output, src, name='MultivariateModel'):
+    """
+
+    :param input:
+    :param args:
+    :param output:
+    :param name:
+    :return:
+    """
+    logger = logging.getLogger('root')
+    logger.info("Centering input to multivariate clustering.")
+
+    center = input.apply(lambda x: x - x.mean(), axis=1)
+
+    # Need to take the transpose
+    # Samples x Genes
+    data = center.T.values
+
+    # Create dataset object for inference
+    dataset = bnpy.data.XData(data)
+
+    # Set the prior for creating a new cluster
+    gamma = args.gamma
+
+    # Start with a standard identity matrix
+    sF = args.sF
+
+    # Starting with 5 cluster because starting with
+    # 1 cluster biases the fit towards not finding clusters.
+    K = args.K
+
+    nLap = args.num_laps
+
+    logger.info("Multivariate Model Params:\n"
+                 "gamma: %.2f\n"
+                 "sF: %.2f\n"
+                 "K: %d\n"
+                 "nLaps: %d" % (gamma, sF, K, nLap))
+
+    # Fit multivariate model
+    hmodel, converged, params, stdout = subprocess_fit(name,
+                                                       dataset,
+                                                       gamma,
+                                                       sF,
+                                                       K,
+                                                       nLap=nLap,
+                                                       timeout_sec=args.max_fit_time)
+
+    if converged is False:
+        logging.info("WARNING: Multivariate model did not converge!")
+        pth = os.path.join(output, 'NOT_CONVERGED')
+        with open(pth, 'w') as f:
+            f.write("WARNING: Multivariate model did not converge!")
+
+    asnmts = get_assignments(hmodel, dataset)
+
+    pth = os.path.join(output, 'assignments.tsv')
+    with open(pth, 'w') as f:
+        for sample, asnmt in zip(center.columns, asnmts):
+            f.write('{sample}\t{assignment}\n'.format(sample=sample,
+                                                      assignment=asnmt))
+
+    # Save model
+    bnpy.ioutil.ModelWriter.save_model(hmodel,
+                                       output,
+                                       prefix=name)
+
+    create_notebook(src, name, output)
+
+    with open(os.path.join(output, 'PARAMS'), 'w') as f:
+        f.write(params)
+
+    with open(os.path.join(output, 'STDOUT'), 'w') as f:
+        f.write(stdout)

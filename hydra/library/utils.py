@@ -80,3 +80,38 @@ def read_genesets(sets):
                 gene = line.strip()
                 gs[name].add(gene)
     return gs
+
+
+def find_aliases(gss, mapper, index):
+    """
+    Removes genes that do not overlap with matrix. Will
+    try to rescue genes by mapping them to an alias that
+    overlaps.
+
+    :param gss (dict): Gene set database; {names: genes}
+    :param mapper (pandas.DataFrame): DataFrame mapping genes to aliases
+    :param index (pandas.DataFrame.index): Expression DataFrame gene index
+    :return: Dictionary of gene sets including overlapping gene aliases
+    :rtype: dict
+    """
+    logger = logging.getLogger('root')
+    for gs, genes in gss.items():
+        filtered = []
+        for gene in genes:
+            if gene in index:
+                filtered.append(gene)
+
+            else:
+                aliases = mapper.loc[mapper['gene'] == gene, 'aliases']
+                if len(aliases) > 0:
+                    for alias in aliases:
+                        matches = [x for x in alias.split('|') if x in index]
+                        if len(matches) > 0:
+                            for match in matches:
+                                logger.info("Replacing %s in %s with %s" % (gene,
+                                                                             gs,
+                                                                             match))
+                                filtered.append(match)
+        # Remove duplicates
+        gss[gs] = list(set(filtered))
+    return gss

@@ -1,22 +1,21 @@
-FROM ubuntu:16.04
-FROM rocker/r-ver:3.4.4
+FROM rocker/tidyverse:3.4.4
 
 MAINTAINER Jacob Pfeil, jpfeil@ucsc.edu
 
 # Update and install required software
-RUN apt-get update --fix-missing \
-    && apt-get install -y build-essential \
-                          wget \
-                          git \
-                          libgl1-mesa-glx \
-                          libxml2 \
-                          libxml2-dev \
-                          libcurl4-openssl-dev \
-                          gfortran \
-                          libicu55 \
-                          libicu-dev \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update --fix-missing && \
+    apt-get install -y build-essential \
+                       wget \
+                       git \
+                       libgl1-mesa-glx \
+                       libxml2 \
+                       libxml2-dev \
+                       gfortran \
+                       libssl-dev \
+                       libcurl4-gnutls-dev \
+                       libicu-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install miniconda
 RUN wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O ~/miniconda.sh

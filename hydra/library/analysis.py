@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 import bnpy
 import collections
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 import os
@@ -13,7 +14,6 @@ import uuid
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, cophenet, linkage, dendrogram
-from scipy.spatial.distance import pdist
 
 from library.fit import subprocess_fit, run
 
@@ -31,35 +31,50 @@ class EnrichmentAnalysis(object):
                  mm_path=None,
                  exp_path=None,
                  min_comp_filter=0.2,
-                 gmt=None):
+                 gmt_path=None):
+        """
+        Performs hydra enrichment analysis.
+
+        :param mm_path (str): Path to MultiModelGenes directory
+        :param exp_path (str): Path to expression matrix
+        :param gmt_path (str): Path to gene set database in GMT format
+        :param min_comp_filter (float): Minimum cluster probability
+        """
 
         if mm_path is None:
-            raise ValueError('Need path to MultiModalGenes\nRequires --save-genes setting')
+            raise ValueError('Need path to MultiModalGenes!')
+
+        self.mm_path = mm_path
 
         if exp_path is None:
-            raise ValueError('Need path to original expression matrix')
+            raise ValueError('Need path to original expression matrix!')
 
         self.exp = pd.read_csv(exp_path, sep='\t', index_col=0)
         self.background = list(self.exp.index.values)
-        print "Background: ", len(self.background)
-
-        self.mm_path = mm_path
+        self.gmt = gmt_path
         self.min_comp_filter = min_comp_filter
 
-        self.mm_genes = self.get_multimodal_genes()
+        self.logger = logging.getLogger('root')
+        self.logger.debug("Background: %d" % len(self.background))
 
-        self.gmt = gmt
+        self.mm_genes = self.get_multimodal_genes()
         self.enrich = self.run_enrich()
 
-    def get_multimodal_genes(self, verbose=False):
+    def get_multimodal_genes(self):
+        """
+        Reads in hydra gene-level fits. Filters genes
+        that have low impact on population based on the
+        minimum component probability parameter.
+
+        :return:
+        """
         assert os.path.exists(self.mm_path), "Can't find path to MultiModalGenes"
         genes = os.listdir(self.mm_path)
         mm = set()
         self.min_probs = []
         for gene in genes:
             if gene in y_genes:
-                if verbose:
-                    print 'Skipping chrY genes: ', gene
+                self.logger.debug('Skipping chrY genes: %s' % gene)
                 continue
 
             model_pth = os.path.join(self.mm_path, gene)
@@ -68,36 +83,19 @@ class EnrichmentAnalysis(object):
             probs = model.allocModel.get_active_comp_probs()
             self.min_probs.append(min(probs))
             if min(probs) < self.min_comp_filter:
-                if verbose:
-                    print 'Minimum Component Probability Filter: ', gene
+                self.logger.debug('Minimum Component Probability Filter: %s' % gene)
                 continue
-
             mm.add(gene)
-        print 'Found %d multimodal genes' % len(mm)
+        self.logger.info('Found %d multimodal genes' % len(mm))
         return list(mm)
 
-    def _recommend_min_comp(self, variance=0.15):
-        "In development. Not ready for use."
-
-        if self.min_probs is None:
-            raise ValueError('Need to init class first!')
-
-        sns.distplot(self.min_probs)
-
-        d = pd.DataFrame(index=range(len(self.min_probs)),
-                         columns=[0])
-
-        d.loc[:, 0] = self.min_probs
-        m = MultivariateMixtureModel(d, center=True, variance=variance)
-        a = m.get_assignments(d)
-        groups = [[] for _ in m.hmodel.allocModel.get_active_comp_probs()]
-        for v, c in zip(self.min_probs, a):
-            groups[c].append(v)
-        means = [np.mean(x) for x in groups]
-        _max = np.argmax(means)
-        return min(groups[_max])
-
     def run_enrich(self):
+        """
+        Runs clusterProfiler enrichment analysis
+
+        :return: Enriched gene sets
+        :rtype: pandas.DataFrame
+        """
         mm_temp = os.path.join(tempfile.gettempdir(), 'MultiModal' + str(uuid.uuid4()))
         b_temp = os.path.join(tempfile.gettempdir(), 'BackGround' + str(uuid.uuid4()))
         res = os.path.join(tempfile.gettempdir(), str(uuid.uuid4()))
@@ -129,21 +127,32 @@ class EnrichmentAnalysis(object):
             raise ValueError("Can't find GMT file:\n%s" % self.gmt)
 
         try:
-            print ' '.join(cmd)
-            stdout, stderr = run(cmd)
+            self.logger.debug(' '.join(cmd))
+            _, _ = run(cmd)
 
         except subprocess.CalledProcessError:
-            print ' '.join(cmd)
+            self.logger.info(' '.join(cmd))
             raise
 
         return pd.read_csv(res)
 
     def get_enriched_terms(self):
+        """
+        Helper function to return enriched term dataframe
+
+        :return: Enriched Terms
+        :rtype: pandas.DataFrame
+        """
         return self.enrich
 
-    def get_enriched_term_genes(self):
+    def get_enriched_term_genes(self, regex=None):
+        """
+        Helper function to return all enriched go term genes
+
+        :return:
+        """
         if self.enrich.shape[0] == 0:
-            raise ValueError("No GO terms found.")
+            raise ValueError("No enriched terms found.")
 
         genes = set()
         for g in self.enrich['geneID'].values:
