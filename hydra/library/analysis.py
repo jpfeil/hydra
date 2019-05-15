@@ -55,6 +55,7 @@ class EnrichmentAnalysis(object):
         self.min_comp_filter = min_comp_filter
 
         self.logger = logging.getLogger('root')
+        self.logger.info("Startng hydra enrichment clustering analysis")
         self.logger.debug("Background: %d" % len(self.background))
 
         self.mm_genes = self.get_multimodal_genes()
@@ -128,10 +129,16 @@ class EnrichmentAnalysis(object):
 
         try:
             self.logger.debug(' '.join(cmd))
-            _, _ = run(cmd)
+            stdout, stderr = run(cmd)
 
         except subprocess.CalledProcessError:
-            self.logger.info(' '.join(cmd))
+            self.logger.info(stdout)
+            self.logger.info(stderr)
+            raise
+
+        except IOError:
+            self.logger.info(stdout)
+            self.logger.info(stderr)
             raise
 
         return pd.read_csv(res)

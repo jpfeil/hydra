@@ -268,7 +268,7 @@ def enrichment_analysis(matrx, args):
     """
     logger = logging.getLogger('root')
     genes = matrx.index.values
-    if args.mm_path == False:
+    if args.mm_path is None:
         start = len(genes)
         res = filter_gene_set(list(genes),
                               matrx,
@@ -309,9 +309,9 @@ def enrichment_analysis(matrx, args):
     terms = post.get_enriched_terms()
 
     if terms.shape[0] == 0:
-        logging.info("No enriched terms were found!\n"
-                     "Try decreasing the min-prob-filter parameter.\n"
-                     "Repeat enrichment analysis using jupyter notebook")
+        logger.info("No enriched terms were found!\n"
+                    "Try decreasing the min-prob-filter parameter.\n"
+                    "Repeat enrichment analysis using jupyter notebook")
         return
 
     else:
@@ -334,7 +334,8 @@ def filter(matrx, args):
     :param args argparse.Namespace: Pipeline configuration namespace
     :return: None
     """
-    logging.info("Running multimodal filter")
+    logger = logging.getLogger('root')
+    logger.info("Running multimodal filter")
     genes = matrx.index.values
     _ = filter_gene_set(genes,
                         matrx,
@@ -344,7 +345,7 @@ def filter(matrx, args):
                         output_dir=args.output_dir,
                         sensitive=args.sensitive)
     mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
-    logging.info('Multimodal genes are located here:\n%s' % mm_genes)
+    logger.info('Multimodal genes are located here:\n%s' % mm_genes)
 
 
 def sweep(matrx, args):
@@ -356,9 +357,10 @@ def sweep(matrx, args):
     :param args (argparse.Namespace):
     :return:
     """
+    logger = logging.getLogger('root')
     # Determine which gene sets are included.
     if args.test:
-        logging.info("Loading debug gene sets...")
+        logger.info("Loading debug gene sets...")
         sets, _ = get_test_genesets(src)
         genesets = read_genesets(sets)
         args.gmt = 'TEST'
@@ -370,27 +372,33 @@ def sweep(matrx, args):
             raise ValueError("Need to specify gene sets for analysis.")
 
     else:
-        logging.warn("No gene set database given.")
+        logger.warn("No gene set database given.")
         genesets = {'ALL_GENES': set(matrx.index.values)}
 
     # Find overlap in alias space
     pth = os.path.join(src, 'data/alias-mapper.gz')
     alias_mapper = pd.read_csv(pth, sep='\t')
-    logging.info("Looking for gene aliases...")
+    logger.info("Looking for gene aliases...")
     genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
-    logging.info("Starting gene set clustering analysis:\n%s" % args.gmt)
+    logger.info("Starting gene set clustering analysis:\n%s" % args.gmt)
     gene_set_clustering(genesets, matrx, args)
 
 
 def enrich(matrx, args):
-    if args.enrichment:
-        assert args.gmt is not None, "Need GMT file for enrichment analysis"
-        logging.info("Starting unsupervised enrichment analysis:\n%s" % args.gmt)
+    """
+
+    :param matrx:
+    :param args:
+    :return:
+    """
+    logger = logging.getLogger('root')
+    if args.gmt is not None:
+        logger.info("Starting unsupervised enrichment analysis:\n%s" % args.gmt)
         enrichment_analysis(matrx, args)
 
-    elif args.go_enrichment:
-        logging.info("Starting unsupervised enrichment analysis using clusterProfiler GO analysis")
+    elif args.gmt is None and args.go_enrichment:
+        logger.info("Starting unsupervised enrichment analysis using clusterProfiler GO analysis")
         args.gmt = "GO"
         enrichment_analysis(matrx, args)
 
@@ -539,44 +547,46 @@ def main():
 
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
                         level=level)
-    logging.getLogger('root').addHandler(logging.StreamHandler())
+    logging.getLogger().addHandler(logging.StreamHandler())
 
-    logging.info("Started Hydra...")
-    logging.info("Parameters:")
+    logger = logging.getLogger('root')
+
+    logger.info("Started Hydra...")
+    logger.info("Parameters:")
     for key, value in vars(args).items():
-        logging.info('\t%s: %s' % (key, value))
+        logger.info('\t%s: %s' % (key, value))
 
     if args.min_mean_filter is not None:
-        logging.info("Minimum gene expression mean: %0.2f" % args.min_mean_filter)
+        logger.info("Minimum gene expression mean: %0.2f" % args.min_mean_filter)
 
     if args.min_prob_filter is not None:
         assert args.min_prob_filter < 1.0, 'Probability filter must be expressed as a decimal!'
-        logging.info("Minimum component probability: %0.2f" % args.min_prob_filter)
+        logger.info("Minimum component probability: %0.2f" % args.min_prob_filter)
 
     # Read in expression data
-    logging.info("Reading in expression data:\n%s" % args.expression)
+    logger.info("Reading in expression data:\n%s" % args.expression)
     matrx = pd.read_csv(args.expression,
                         sep='\t',
                         index_col=0)
 
     # Remove duplicates in index
-    logging.info("Removing duplicate genes:")
-    logging.info("Number of genes: %d" % matrx.shape[0])
+    logger.info("Removing duplicate genes:")
+    logger.info("Number of genes: %d" % matrx.shape[0])
     matrx = matrx[~matrx.index.duplicated(keep='first')]
-    logging.info("Number of genes after removing duplicates: %d" % matrx.shape[0])
+    logger.info("Number of genes after removing duplicates: %d" % matrx.shape[0])
 
     drop_genes = set()
     for gene in matrx.index:
         if '/' in gene:
-            logging.info("Gene names cannot contain forward slashes! %s" % gene)
+            logger.info("Gene names cannot contain forward slashes! %s" % gene)
             drop_genes.add(gene)
 
         if "'" in gene or "\"" in gene:
-            logging.info("Gene names cannot contain quotation marks! %s" % gene)
+            logger.info("Gene names cannot contain quotation marks! %s" % gene)
             drop_genes.add(gene)
 
     matrx = matrx.drop(list(drop_genes), axis=0)
-    logging.info("Number of genes after "
+    logger.info("Number of genes after "
                  "removing misformatted genes: %d" % matrx.shape[0])
 
     if args.mode == 'filter':
