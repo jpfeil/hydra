@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 import bnpy
 import collections
+import itertools
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
@@ -31,6 +32,7 @@ class EnrichmentAnalysis(object):
                  mm_path=None,
                  exp_path=None,
                  min_comp_filter=0.2,
+                 min_effect_filter=None,
                  gmt_path=None):
         """
         Performs hydra enrichment analysis.
@@ -53,6 +55,7 @@ class EnrichmentAnalysis(object):
         self.background = list(self.exp.index.values)
         self.gmt = gmt_path
         self.min_comp_filter = min_comp_filter
+        self.min_effect_filter = min_effect_filter
 
         self.logger = logging.getLogger('root')
         self.logger.info("Startng hydra enrichment clustering analysis")
@@ -86,6 +89,20 @@ class EnrichmentAnalysis(object):
             if min(probs) < self.min_comp_filter:
                 self.logger.debug('Minimum Component Probability Filter: %s' % gene)
                 continue
+
+            effects = []
+            for i, j in itertools.combinations(range(len(probs)), 2):
+                if i == j:
+                    continue
+
+                mi = model.obsModel.get_mean_for_comp(i)
+                mj = model.obsModel.get_mean_for_comp(j)
+                effects.append(abs(mj - mi))
+
+            if min(effects) < self.min_effect_filter:
+                self.logger.debug('Minimum Effect Filter: %s' % gene)
+                continue
+
             mm.add(gene)
         self.logger.info('Found %d multimodal genes' % len(mm))
         return list(mm)
@@ -204,16 +221,20 @@ class MultivariateMixtureModel(object):
         data = data.T.values
         xdata = bnpy.data.XData(data)
 
-        output = subprocess_fit('EnrichmentAnalysis',
-                                xdata,
-                                gamma=self.gamma,
-                                sF=self.variance,
-                                K=self.K)
+        hmodel, info_dict = bnpy.run(
+            xdata, 'DPMixtureModel', 'Gauss', 'memoVB',
+            output_path=('/tmp/%s/' % uuid.uuid4() +
+                         'trymoves-K=%d-gamma=%s-ECovMat=%s*eye-moves=merge,shuffle/' % (
+                             self.K, self.gamma, self.variance)),
+            nLap=1000, nTask=1, nBatch=1,
+            gamma0=self.gamma, sF=self.variance, ECovMat='eye',
+            K=self.K, initname='randexamplesbydist',
+            moves='birth,merge,delete,shuffle',
+            b_startLap=0,
+            m_startLap=2,
+            d_startLap=2)
 
-        if output[1] is False:
-            print 'WARNING: DPMM algorithm did not converge!'
-
-        self.hmodel = output[0]
+        self.hmodel = hmodel
         self.clusters = collections.defaultdict(list)
         for sample, cluster in zip(self.og_data.columns, self.get_assignments(self.og_data)):
             self.clusters[cluster].append(sample)
@@ -224,7 +245,7 @@ class MultivariateMixtureModel(object):
         # not be the same as the one we trained on
 
         genes = self.og_data.index.values
-        data = data.reindex(genes)
+        data = data.reindex(genes).dropna()
         if self.center:
             data = data.sub(self.og_data.mean(axis=1), axis=0)
         xdata = bnpy.data.XData(data.T.values)
@@ -301,9 +322,9 @@ class HClust(object):
 
         groups = collections.defaultdict(list)
 
-        for sample, cluster in zip(self.og_data.columns,
+        for gene, cluster in zip(self.og_data.index.values,
                                    clusters):
-            groups[cluster].append(sample)
+            groups[cluster].append(gene)
 
         self.row_groups = groups
 
@@ -356,6 +377,7 @@ class HClust(object):
                               center=0,
                               cmap=sns.diverging_palette(240, 10, n=7),
                               figsize=(10, 10))
+
 
 class HydraUnsupervisedAnalysis(object):
     def __init__(self):
@@ -419,3 +441,4 @@ def n1(zscore, gmt=None):
     subprocess.check_call(cmd)
 
     return pd.read_csv(fgsea_temp, index_col=0)
+

@@ -227,6 +227,14 @@ def apply_multivariate_model(input, args, output, src, name='MultivariateModel')
                                        output,
                                        prefix=name)
 
+    try:
+        bnpy.ioutil.ModelReader.load_model_at_prefix(output,
+                                                     prefix=name)
+
+    except IOError:
+        logging.error("Error in writing model!")
+        raise
+
     create_notebook(src, name, output)
 
     with open(os.path.join(output, 'PARAMS'), 'w') as f:

@@ -13,6 +13,7 @@ RUN apt-get update --fix-missing && \
                        gfortran \
                        libssl-dev \
                        libcurl4-gnutls-dev \
+                       libreadline7 \
                        libicu-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*

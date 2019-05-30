@@ -5,17 +5,24 @@ The hydra pipeline includes routines for identifying multimodally distributed ge
 differentially expressed gene sets, and identifying enriched gene sets from multimodally expressed 
 genes. Hydra is distributed as a docker container and includes sever
 
-## Identify Multimodal Genes
+## Unsupervised Enrichment Analysis
 Use the filter tool to identify multimodally expressed genes
 
 ```
-docker 
+docker -it -v $PWD:/data jpfeil/hydra:0.2.0 filter -e <PATH to expression tsv file> -o <output directory> 
+```
+
+Perform enrichment clustering across multimodally expressed genes
+```
+docker -it -v $PWD:/data jpfeil/hydra:0.2.0 enrich \
+                                            -e <PATH to expression tsv file> \
+                                            -m <PATH to MultiModalGenes dir> \
+                                            --min-prob-filter 0.1 \
+                                            -o <output directory> 
 ```
 
 ## Post-Analysis
 Each gene set will get its own directory in the output directory. Start a jupyter notebook session to investigate expression clusters. Open the *.ipynb files to begin analyzing gene set clustering.  
-
-
 
 
 ## Installation (optional)

@@ -254,7 +254,7 @@ def gene_set_clustering(genesets, matrx, args):
         pth = os.path.join(gsdir, 'training-data.tsv')
         training.to_csv(pth, sep='\t')
 
-        apply_multivariate_model(training, args, gsdir, gs, src)
+        apply_multivariate_model(training, args, gsdir, src, name=gs)
 
 
 def enrichment_analysis(matrx, args):
@@ -300,7 +300,8 @@ def enrichment_analysis(matrx, args):
 
     post = EnrichmentAnalysis(mm_genes,
                               args.expression,
-                              args.min_prob_filter,
+                              min_comp_filter=args.min_prob_filter,
+                              min_effect_filter=args.min_effect_filter,
                               gmt_path=args.gmt)
 
     output = os.path.join(args.output_dir, 'EnrichmentAnalysis', date)
@@ -479,6 +480,12 @@ def main():
                         type=int,
                         default=5)
 
+    parser.add_argument('--min-effect-filter',
+                        dest='min_effect_filter',
+                        help='Removes genes with a minimum effect less than value.',
+                        type=float,
+                        default=None)
+
     parser.add_argument('-K',
                         help='Number of clusters to start with for multivariate clustering',
                         type=int,
@@ -510,7 +517,7 @@ def main():
                         help='Runs univariate filter in sensitive mode.',
                         action='store_true')
 
-    parser.add_argument('--output-dir',
+    parser.add_argument('-o', '--output-dir',
                         dest='output_dir',
                         default='hydra-out')
 
