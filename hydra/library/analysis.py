@@ -210,7 +210,12 @@ class MultivariateMixtureModel(object):
             print 'WARNING: Number of genes outnumbers samples. ' \
                   'Consider more stringent filtering.'
 
-    def fit(self):
+    def fit(self, name='MultivariateAnalysis'):
+        """
+
+        :param name:
+        :return:
+        """
         # This is a pandas dataframe: genes x samples
         data = self.og_data
         if self.center:
@@ -221,19 +226,28 @@ class MultivariateMixtureModel(object):
         data = data.T.values
         xdata = bnpy.data.XData(data)
 
-        hmodel, info_dict = bnpy.run(
-            xdata, 'DPMixtureModel', 'Gauss', 'memoVB',
-            output_path=('/tmp/%s/' % uuid.uuid4() +
-                         'trymoves-K=%d-gamma=%s-ECovMat=%s*eye-moves=merge,shuffle/' % (
-                             self.K, self.gamma, self.variance)),
-            nLap=1000, nTask=1, nBatch=1,
-            gamma0=self.gamma, sF=self.variance, ECovMat='eye',
-            K=self.K, initname='randexamplesbydist',
-            moves='birth,merge,delete,shuffle',
-            b_startLap=0,
-            m_startLap=2,
-            d_startLap=2)
-
+        workdir = tempfile.mkdtemp(prefix="%s_" % name)
+        output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,delete,shuffle/'.format(K=self.K,
+                                                                                              G=self.gamma,
+                                                                                              Cov=self.variance)
+        output_path = os.path.join(workdir, output_dir)
+        hmodel, info_dict = bnpy.run(xdata,
+                                     'DPMixtureModel',
+                                     'Gauss',
+                                     'memoVB',
+                                     nLap=1000,
+                                     nTask=1,
+                                     nBatch=1,
+                                     gamma0=self.gamma,
+                                     sF=self.variance,
+                                     ECovMat='eye',
+                                     K=self.K,
+                                     initname='randexamplesbydist',
+                                     moves='birth,merge,delete,shuffle',
+                                     b_startLap=0,
+                                     m_startLap=2,
+                                     d_startLap=2,
+                                     output_path=output_path)
         self.hmodel = hmodel
         self.clusters = collections.defaultdict(list)
         for sample, cluster in zip(self.og_data.columns, self.get_assignments(self.og_data)):

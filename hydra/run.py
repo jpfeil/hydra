@@ -9,6 +9,7 @@ import os
 import pandas as pd
 import subprocess
 import textwrap
+import re
 
 from collections import defaultdict
 
@@ -408,11 +409,39 @@ def enrich(matrx, args):
 
 
 def run_notebook():
-    subprocess.check_call(['jupyter',
-                           'notebook',
-                           '--allow-root',
-                           '--ip', '0.0.0.0',
-                           '--no-browser'])
+
+    logger = logging.getLogger('root')
+
+    regex = re.compile('token=(?P<token>\w*)')
+
+    cmd = ['jupyter',
+           'notebook',
+           '--allow-root',
+           '--ip', '0.0.0.0',
+           '--no-browser']
+
+    try:
+        logger.info("Starting Jupyter Notebook")
+        p = subprocess.Popen(cmd,
+                             stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE,
+                             universal_newlines=True)
+
+        for stderr_line in iter(p.stderr.readline, ""):
+            m = regex.search(stderr_line)
+
+            if m:
+                logger.info("TOKEN: %s" % m.group('token'))
+
+        p.stderr.close()
+        return_code = p.wait()
+        if return_code:
+            raise subprocess.CalledProcessError(return_code, cmd)
+
+    except KeyboardInterrupt:
+        logger.info('Closing Jupyter Notebook')
+
+
 
 def main():
     """
@@ -539,11 +568,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Spin up notebook
-    if args.mode == 'notebook':
-        run_notebook()
-        return
-
     # Make the output directory if it doesn't already exist
     mkdir_p(args.output_dir)
 
@@ -557,6 +581,11 @@ def main():
     logging.getLogger().addHandler(logging.StreamHandler())
 
     logger = logging.getLogger('root')
+
+    # Spin up notebook
+    if args.mode == 'notebook':
+        run_notebook()
+        return
 
     logger.info("Started Hydra...")
     logger.info("Parameters:")

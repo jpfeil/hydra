@@ -42,6 +42,8 @@ ENV HYDRA_SRC=/opt/hydra
 
 RUN export PYTHONPATH="$PYTHONPATH:/opt/hydra/library"
 
+RUN pip install scikit-posthocs xlrd
+
 WORKDIR /data
 
 ENTRYPOINT ["python", "/opt/hydra/run.py"]
