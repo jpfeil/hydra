@@ -8,6 +8,7 @@ import numpy as np
 import os
 import pandas as pd
 import subprocess
+import sys
 import textwrap
 import re
 
@@ -410,6 +411,8 @@ def enrich(matrx, args):
 
 def run_notebook():
 
+    sys.path.append(src)
+
     logger = logging.getLogger('root')
 
     regex = re.compile('token=(?P<token>\w*)')
@@ -422,6 +425,7 @@ def run_notebook():
 
     try:
         logger.info("Starting Jupyter Notebook")
+        logger.info('Ctrl-C to stop session...')
         p = subprocess.Popen(cmd,
                              stdout=subprocess.PIPE,
                              stderr=subprocess.PIPE,
@@ -461,7 +465,7 @@ def main():
 
     parser.add_argument('-e', '--expression',
                         help='Gene symbol by sample matrix.\nDo not center the data.',
-                        required=True)
+                        required=False)
 
     parser.add_argument('--gmt',
                         help='Gene set database in GMT format.',
@@ -470,11 +474,6 @@ def main():
     parser.add_argument('-m', '--multimodal',
                         dest='mm_path',
                         help='Path to MultiModalGenes directory',
-                        required=False)
-
-    parser.add_argument('--enrichment',
-                        help='Performs enrichment analysis using gene set database',
-                        action='store_true',
                         required=False)
 
     parser.add_argument('--go-enrichment',
@@ -598,6 +597,9 @@ def main():
     if args.min_prob_filter is not None:
         assert args.min_prob_filter < 1.0, 'Probability filter must be expressed as a decimal!'
         logger.info("Minimum component probability: %0.2f" % args.min_prob_filter)
+
+    if args.expression is None:
+        raise ValueError('Path to expression file is required! (-e)')
 
     # Read in expression data
     logger.info("Reading in expression data:\n%s" % args.expression)

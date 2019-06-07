@@ -1,65 +1,90 @@
 ## Overview
 
-Hydra is a non-parametric clustering pipeline to identify differentially expressed pathways. 
-The hydra pipeline includes routines for identifying multimodally distributed genes, scanning for 
-differentially expressed gene sets, and identifying enriched gene sets from multimodally expressed 
-genes. Hydra is distributed as a docker container and includes sever
+Hydra is a non-parametric clustering pipeline to identify 
+differentially expressed pathways. The hydra pipeline includes 
+routines for identifying multimodally distributed genes, scanning for 
+differentially expressed gene sets, and identifying enriched gene 
+sets from multimodally expressed genes. Hydra is available as a 
+docker container for easy deployment.
+
+## Gene Set Analysis
+Use the sweep command to search for differential expression across a database 
+of gene set annotations. Make sure the GMT file gene annotations matches the 
+annotations in the expression matrix.
+```
+docker -it -v $PWD:/data jpfeil/hydra:0.2.1 sweep \
+                                            -e <PATH to expression tsv file> \
+                                            -o <output directory> \
+                                            --min-mean-filter 1.0 \
+                                            --gmt /opt/hydra/gene-sets/h.all.v6.2.symbols.gmt \
+                                            --CPU 15 
+```
 
 ## Unsupervised Enrichment Analysis
 Use the filter tool to identify multimodally expressed genes
 
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.0 filter -e <PATH to expression tsv file> -o <output directory> 
+docker -it -v $PWD:/data jpfeil/hydra:0.2.1 filter \
+                                            -e <PATH to expression tsv file> \ 
+                                            -o <output directory> \
+                                            --CPU 15 
 ```
+This will generate a MultiModalGenes directory. The next step in the pipeline 
+is to cluster enriched gene sets gene set genes.  
 
-Perform enrichment clustering across multimodally expressed genes
+Perform GO enrichment clustering across multimodally expressed genes
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.0 enrich \
+docker -it -v $PWD:/data jpfeil/hydra:0.2.1 enrich \
                                             -e <PATH to expression tsv file> \
                                             -m <PATH to MultiModalGenes dir> \
                                             --min-prob-filter 0.1 \
+                                            --go-enrichment \
                                             -o <output directory> 
 ```
 
-## Post-Analysis
-Each gene set will get its own directory in the output directory. Start a jupyter notebook session to investigate expression clusters. Open the *.ipynb files to begin analyzing gene set clustering.  
-
-
-## Installation (optional)
-Download hydra
+Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag
 ```
-git clone https://github.com/jpfeil/hydra.git
-cd hydra
-```
-
-Hydra requires python 2.7. We recommend creating a hydra specific conda environment.
-```
-conda create -n hydra python=2.7
-source activate hydra
-conda install -y --file requirements.tsv
+docker -it -v $PWD:/data jpfeil/hydra:0.2.1 enrich \
+                                            -e <PATH to expression tsv file> \
+                                            -m <PATH to MultiModalGenes dir> \
+                                            --min-prob-filter 0.1 \
+                                            --gmt <PATH to GMT file> \
+                                            -o <output directory> 
 ```
 
-Install bnpy clustering tools:
-```
-git clone https://github.com/bnpy/bnpy.git
-cd bnpy/
-pip install -e .
-```
+## Jupyter Notebook
+Interactive environment for investigating expression data. This comes with all of the 
+hydra code and dependencies pre-installed.
 
-Install fgsea (optional)
-Open an R session
 ```
-library(devtools)
-install_github("ctlab/fgsea")
+docker run -it -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.2.1 notebook -e None
 ```
 
+Perform interactive analysis through a browser
+```
+http://127.0.0.1:8889
+```
+The token for accessing the Jupyter notebook is printed to stdout.
 
-Gene Set Sources:
+Multimodal gene analysis
+```
+import library.analysis as hydra
 
-The hallmarks of cancer gene sets were curated by Ted Goldstein:
 
-https://github.com/tedgoldstein/hallmarks
+mm = hydra.EnrichmentAnalysis(exp_path,
+                              mm_path,
+                              min_comp_filter=0.2,
+                              gmt_path='GO')
+                              
+mm.get_enriched_terms()
 
-The MSigDB gene sets were downloaded from the MSigDB portal:
+genes = mm.get_enriched_term_genes()
 
-http://software.broadinstitute.org/gsea/msigdb/index.jsp
+clus = hydra.MultivariateMixtureModel(data=exp.reindex(genes),
+                                      center=True,
+                                      gamma=5.0,
+                                      variance=2.0,
+                                      K=5)
+                                   
+assignments = clus.get_assignments(exp.reindex(genes))
+```

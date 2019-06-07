@@ -14,9 +14,9 @@ import uuid
 
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
-from scipy.cluster.hierarchy import fcluster, cophenet, linkage, dendrogram
+from scipy.cluster.hierarchy import fcluster, dendrogram
 
-from library.fit import subprocess_fit, run
+from library.fit import run
 
 src = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -178,8 +178,13 @@ class EnrichmentAnalysis(object):
         if self.enrich.shape[0] == 0:
             raise ValueError("No enriched terms found.")
 
+        t = self.enrich.copy()
+
+        if regex:
+            t = t[t['Description'].str.contains(regex)]
+
         genes = set()
-        for g in self.enrich['geneID'].values:
+        for g in t['geneID'].values:
             genes.update(g.strip().split('/'))
 
         return list(genes)
@@ -445,8 +450,6 @@ def n1(zscore, gmt=None):
            gmt,
            rnk_temp,
            fgsea_temp]
-
-    zscore = zscore.sort_values(ascending=False)
 
     zscore.to_csv(rnk_temp,
                   header=None,
