@@ -2,7 +2,7 @@ import nbformat as nbf
 import os
 
 
-def create_notebook(src, gs, output_dir):
+def create_notebook(gs, output_dir):
     """
     Creates a jupyter notebook for analyzing the output of
     hydra.
@@ -191,3 +191,54 @@ for cluster, rows in assign.groupby(1):
     nbf.write(nb, pth)
 
     return pth
+
+def enrichment_notebook(exp_path, output_dir):
+    nb = nbf.v4.new_notebook()
+
+    text = """\
+Code for investigating gene and sample clusters"""
+
+    import_statements = """\
+%matplotlib inline
+import sys
+sys.path.append('/opt/hydra/')
+import library.analysis as hy
+    """
+
+    data_statements = """\
+exp = pd.read_csv({exp_path}, sep='\t', index_col=0)
+    """.format(exp_path=exp_path)
+
+    enrich_statement = """\
+res = hy.EnrichmentAnalysis(exp_path="../{exp_path}",
+                        mm_path='MultiModalGenes',
+                        min_comp_filter=0.2,
+                        min_effect_filter=1.0,
+                        gmt_path='GO')
+                            
+terms = res.get_enriched_terms()
+    
+genes = res.get_enriched_term_genes()
+
+len(genes)
+    """.format(exp_path=exp_path)
+
+    cluster_statements = """\
+clus = hy.MultivariateMixtureModel(data=exp.reindex(genes),
+                               center=True,
+                               gamma=5.0,
+                               variance=2.0,
+                               K=5, 
+                               verbose=True)
+                               
+assignments = clus.get_assignments(exp.reindex(genes))
+    """
+
+    nb['cells'] = [nbf.v4.new_markdown_cell(text)] + \
+                  [nbf.v4.new_code_cell(x) for x in [import_statements,
+                                                     data_statements,
+                                                     enrich_statement,
+                                                     cluster_statements]]
+
+    pth = os.path.join(output_dir, "EnrichmentAnalysis.ipynb")
+    nbf.write(nb, pth)

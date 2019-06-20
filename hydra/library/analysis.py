@@ -33,7 +33,8 @@ class EnrichmentAnalysis(object):
                  exp_path=None,
                  min_comp_filter=0.2,
                  min_effect_filter=None,
-                 gmt_path=None):
+                 gmt_path=None,
+                 scan=False):
         """
         Performs hydra enrichment analysis.
 

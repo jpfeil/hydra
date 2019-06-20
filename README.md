@@ -12,11 +12,12 @@ Use the sweep command to search for differential expression across a database
 of gene set annotations. Make sure the GMT file gene annotations matches the 
 annotations in the expression matrix.
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.1 sweep \
-                                            -e <PATH to expression tsv file> \
-                                            -o <output directory> \
+docker -it -v $PWD:/data jpfeil/hydra:0.2.2 sweep \
+                                            -e test/test-exp.tsv \
+                                            -o test-sweep \
                                             --min-mean-filter 1.0 \
                                             --gmt /opt/hydra/gene-sets/h.all.v6.2.symbols.gmt \
+                                            --gmt-regex IL2_STAT5
                                             --CPU 15 
 ```
 
@@ -24,9 +25,9 @@ docker -it -v $PWD:/data jpfeil/hydra:0.2.1 sweep \
 Use the filter tool to identify multimodally expressed genes
 
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.1 filter \
-                                            -e <PATH to expression tsv file> \ 
-                                            -o <output directory> \
+docker -it -v $PWD:/data jpfeil/hydra:0.2.2 filter \
+                                            -e test/test-exp.tsv \ 
+                                            -o test-filter \
                                             --CPU 15 
 ```
 This will generate a MultiModalGenes directory. The next step in the pipeline 
@@ -34,7 +35,7 @@ is to cluster enriched gene sets gene set genes.
 
 Perform GO enrichment clustering across multimodally expressed genes
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.1 enrich \
+docker -it -v $PWD:/data jpfeil/hydra:0.2.2 enrich \
                                             -e <PATH to expression tsv file> \
                                             -m <PATH to MultiModalGenes dir> \
                                             --min-prob-filter 0.1 \
@@ -42,14 +43,16 @@ docker -it -v $PWD:/data jpfeil/hydra:0.2.1 enrich \
                                             -o <output directory> 
 ```
 
-Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag
+Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag. The enrichment analysis 
+uses the clusterProfiler tool, which requires the gene set database use entrez ids. The gene expression input matrix 
+should still use gene symbols.
 ```
-docker -it -v $PWD:/data jpfeil/hydra:0.2.1 enrich \
-                                            -e <PATH to expression tsv file> \
+docker -it -v $PWD:/data jpfeil/hydra:0.2.2 enrich \
+                                            -e test/test-exp.tsv \
                                             -m <PATH to MultiModalGenes dir> \
                                             --min-prob-filter 0.1 \
-                                            --gmt <PATH to GMT file> \
-                                            -o <output directory> 
+                                            --gmt /opt/hydra/gene-sets/h.all.v6.2.symbols.gmt \
+                                            -o test-enrich
 ```
 
 ## Jupyter Notebook
@@ -57,7 +60,7 @@ Interactive environment for investigating expression data. This comes with all o
 hydra code and dependencies pre-installed.
 
 ```
-docker run -it -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.2.1 notebook -e None
+docker run -it -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.2.2 notebook -e None
 ```
 
 Perform interactive analysis through a browser

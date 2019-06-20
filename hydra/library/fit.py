@@ -235,7 +235,7 @@ def apply_multivariate_model(input, args, output, src, name='MultivariateModel')
         logging.error("Error in writing model!")
         raise
 
-    create_notebook(src, name, output)
+    create_notebook(name, output)
 
     with open(os.path.join(output, 'PARAMS'), 'w') as f:
         f.write(params)

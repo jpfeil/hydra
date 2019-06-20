@@ -16,6 +16,7 @@ from collections import defaultdict
 
 from library.analysis import EnrichmentAnalysis
 from library.fit import subprocess_fit, apply_multivariate_model
+from library.notebook import enrichment_notebook
 from library.utils import mkdir_p, \
                           get_genesets, \
                           get_test_genesets, \
@@ -329,6 +330,8 @@ def enrichment_analysis(matrx, args):
     apply_multivariate_model(training, args, output, src)
 
 
+
+
 def filter(matrx, args):
     """
     Runs the multimodal filter and stops
@@ -406,7 +409,7 @@ def enrich(matrx, args):
         enrichment_analysis(matrx, args)
 
     else:
-        raise ValueError()
+        raise ValueError("Either specify a GMT file or use the --go-enrichment flag!")
 
 
 def run_notebook():
@@ -423,6 +426,8 @@ def run_notebook():
            '--ip', '0.0.0.0',
            '--no-browser']
 
+    found = False
+
     try:
         logger.info("Starting Jupyter Notebook")
         logger.info('Ctrl-C to stop session...')
@@ -434,8 +439,9 @@ def run_notebook():
         for stderr_line in iter(p.stderr.readline, ""):
             m = regex.search(stderr_line)
 
-            if m:
+            if m and not found:
                 logger.info("TOKEN: %s" % m.group('token'))
+                found = True
 
         p.stderr.close()
         return_code = p.wait()
@@ -443,8 +449,7 @@ def run_notebook():
             raise subprocess.CalledProcessError(return_code, cmd)
 
     except KeyboardInterrupt:
-        logger.info('Closing Jupyter Notebook')
-
+        logger.info('\nClosing Jupyter Notebook')
 
 
 def main():
@@ -625,7 +630,7 @@ def main():
 
     matrx = matrx.drop(list(drop_genes), axis=0)
     logger.info("Number of genes after "
-                 "removing misformatted genes: %d" % matrx.shape[0])
+                "removing misformatted genes: %d" % matrx.shape[0])
 
     if args.mode == 'filter':
         filter(matrx, args)
@@ -635,6 +640,8 @@ def main():
 
     elif args.mode == 'enrich':
         enrich(matrx, args)
+        enrichment_notebook(args.expression,
+                            args.output_dir)
 
 if __name__ == '__main__':
     main()
