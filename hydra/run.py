@@ -572,13 +572,13 @@ def main():
 
     args = parser.parse_args()
 
-    # Make the output directory if it doesn't already exist
-    mkdir_p(args.output_dir)
-
     # Set up logger
     level = logging.INFO
     if args.debug:
         level = logging.DEBUG
+
+    # Make the output directory if it doesn't already exist
+    mkdir_p(args.output_dir)
 
     logging.basicConfig(filename=os.path.join(args.output_dir, 'hydra.log'),
                         level=level)

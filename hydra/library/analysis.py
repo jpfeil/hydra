@@ -268,7 +268,14 @@ class MultivariateMixtureModel(object):
         data = data.reindex(genes).dropna()
         if self.center:
             data = data.sub(self.og_data.mean(axis=1), axis=0)
-        xdata = bnpy.data.XData(data.T.values)
+
+        if data.ndim == 1:
+            data = data.values.reshape(1, data.shape[0])
+
+        else:
+            data = data.T.values
+
+        xdata = bnpy.data.XData(data)
 
         unclass = 1 - np.sum(self.hmodel.allocModel.get_active_comp_probs())
         LP = self.hmodel.calc_local_params(xdata)
@@ -283,15 +290,24 @@ class MultivariateMixtureModel(object):
                 asnmts.append(_arg)
         return asnmts
 
-    def n_of_1(self, data, constant=0.05):
-        a = self.get_assignments(data)
+    def cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05):
+        a = self.get_assignments(data).pop()
         if a == -1:
             raise ValueError("Sample did not place in a cluster.")
 
-        data = data.reindex(self.og_data.index)
-        background = self.clusters[a]
-        zscore = (data - self.og_data[background].mean(axis=1)) / (self.og_data[background].std(axis=1) + constant)
-        return n1(zscore)
+        background = self.og_data
+        data = data.reindex(background.index)
+        bsamples = self.clusters[a]
+        zscore = (data - background[bsamples].mean(axis=1)) / (background[bsamples].std(axis=1) + constant)
+        fgsea = n1(zscore, gmt)
+        if return_diff == True:
+            zscore2 = (data - background.mean(axis=1)) / (background.std(axis=1) + constant)
+            fgsea2 = n1(zscore2, gmt)
+            sig1 = fgsea[fgsea['padj'] < alpha]
+            sig2 = fgsea2[fgsea2['padj'] < alpha]
+            index = set(sig1.index.values) - set(sig2.index.values)
+            fgsea = fgsea.reindex(index)
+        return a, fgsea
 
 
 class HClust(object):
@@ -453,7 +469,7 @@ def n1(zscore, gmt=None):
            fgsea_temp]
 
     zscore.to_csv(rnk_temp,
-                  header=None,
+                  header=False,
                   sep='\t')
 
     subprocess.check_call(cmd)
