@@ -71,6 +71,8 @@ The token for accessing the Jupyter notebook is printed to stdout.
 
 Multimodal gene analysis
 ```
+import sys
+sys.path.append('/opt/hydra/')
 import library.analysis as hydra
 
 
