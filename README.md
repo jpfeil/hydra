@@ -76,8 +76,8 @@ sys.path.append('/opt/hydra/')
 import library.analysis as hydra
 
 
-mm = hydra.EnrichmentAnalysis(exp_path,
-                              mm_path,
+mm = hydra.EnrichmentAnalysis(mm_path,   # PATH to MultiModelGenes dir
+                              exp_path,  # PATH to gene expression input
                               min_comp_filter=0.2,
                               gmt_path='GO')
                               
