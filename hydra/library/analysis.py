@@ -216,7 +216,7 @@ class MultivariateMixtureModel(object):
             print 'WARNING: Number of genes outnumbers samples. ' \
                   'Consider more stringent filtering.'
 
-    def fit(self, name='MultivariateAnalysis'):
+    def fit(self, name='MultivariateAnalysis', verbose=False):
         """
 
         :param name:
@@ -253,7 +253,8 @@ class MultivariateMixtureModel(object):
                                      b_startLap=0,
                                      m_startLap=2,
                                      d_startLap=2,
-                                     output_path=output_path)
+                                     output_path=output_path,
+                                     doWriteStdOut=verbose)
         self.hmodel = hmodel
         self.clusters = collections.defaultdict(list)
         for sample, cluster in zip(self.og_data.columns, self.get_assignments(self.og_data)):
