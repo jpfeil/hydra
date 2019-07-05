@@ -43,15 +43,13 @@ docker run -it -v $PWD:/data jpfeil/hydra:0.2.2 enrich \
                                                 -o <output directory> 
 ```
 
-Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag. The enrichment analysis 
-uses the clusterProfiler tool, which requires the gene set database use entrez ids. The gene expression input matrix 
-should still use gene symbols.
+Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag. The enrichment analysis uses the clusterProfiler tool, which requires the gene set database use entrez ids. The gene expression input matrix should still use gene symbols.
 ```
 docker run -it -v $PWD:/data jpfeil/hydra:0.2.2 enrich \
                                                 -e test/test-exp.tsv \
                                                 -m <PATH to MultiModalGenes dir> \
                                                 --min-prob-filter 0.1 \
-                                                --gmt /opt/hydra/gene-sets/h.all.v6.2.symbols.gmt \
+                                                --gmt /opt/hydra/gene-sets/h.all.v6.2.entrez.gmt \
                                                 -o test-enrich
 ```
 
