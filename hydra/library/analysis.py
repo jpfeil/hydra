@@ -12,6 +12,7 @@ import subprocess
 import tempfile
 import uuid
 
+from scipy.stats import ttest_ind
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, dendrogram
@@ -31,7 +32,7 @@ class EnrichmentAnalysis(object):
     def __init__(self,
                  mm_path=None,
                  exp_path=None,
-                 min_comp_filter=0.2,
+                 min_prob_filter=0.2,
                  min_effect_filter=None,
                  gmt_path=None,
                  scan=False):
@@ -41,7 +42,7 @@ class EnrichmentAnalysis(object):
         :param mm_path (str): Path to MultiModelGenes directory
         :param exp_path (str): Path to expression matrix
         :param gmt_path (str): Path to gene set database in GMT format
-        :param min_comp_filter (float): Minimum cluster probability
+        :param min_prob_filter (float): Minimum cluster probability
         """
 
         if mm_path is None:
@@ -55,7 +56,7 @@ class EnrichmentAnalysis(object):
         self.exp = pd.read_csv(exp_path, sep='\t', index_col=0)
         self.background = list(self.exp.index.values)
         self.gmt = gmt_path
-        self.min_comp_filter = min_comp_filter
+        self.min_comp_filter = min_prob_filter
         self.min_effect_filter = min_effect_filter
 
         self.logger = logging.getLogger('root')
@@ -209,6 +210,7 @@ class MultivariateMixtureModel(object):
         self.og_data = data.copy()
         self.hmodel = None
         self.clusters = None
+        self.cluster_features = None
 
         self.hmodel = self.fit()
 
@@ -291,7 +293,53 @@ class MultivariateMixtureModel(object):
                 asnmts.append(_arg)
         return asnmts
 
-    def cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05):
+    def get_cluster_features(self, exp, gmt=None):
+        """
+        Returns dictionary with enriched gene set terms per cluster
+
+        :param exp: Original expression matrix with all genes
+        :return:
+        """
+        if self.clusters is None:
+            raise ValueError("Need to fit model first!")
+
+        if len(exp) < 1000:
+            raise ValueError('Please pass the original expression matrix before multimodal filtering')
+
+        self.cluster_features = {}
+        for c, samples in self.clusters.items():
+            ins = samples
+            outs = []
+            for _c, _samples in self.clusters.items():
+                if _c == c:
+                    continue
+                outs.extend(_samples)
+
+            res = ttest_ind(exp[ins].values,
+                            exp[outs].values,
+                            axis=1).statistic
+
+            tstats = pd.DataFrame(index=exp.index,
+                                  data=res).dropna()
+
+            tstats = tstats.sort_values(0,
+                                        ascending=False)
+
+            gsea = n1(tstats, gmt=gmt)
+            self.cluster_features[c] = gsea.sort_values('NES', ascending=False)
+        return self.cluster_features
+
+    def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05):
+        """
+        Performs GSEA by normalizing cluster background. (BETA)
+
+        :param data:
+        :param constant:
+        :param gmt:
+        :param return_diff:
+        :param alpha:
+        :return:
+        """
         a = self.get_assignments(data).pop()
         if a == -1:
             raise ValueError("Sample did not place in a cluster.")
@@ -455,6 +503,13 @@ def fancy_dendrogram(*args, **kwargs):
 
 
 def n1(zscore, gmt=None):
+    """
+    N-of-1 GSEA. GMT annotation must matched expression annotation
+
+    :param zscore: Ranked dataframe
+    :param gmt: Path to GSEA GMT file
+    :return: GSEA Dataframe
+    """
     rnk_temp = os.path.join(tempfile.gettempdir(), 'RNK' + str(uuid.uuid4()))
     fgsea_temp = os.path.join(tempfile.gettempdir(), 'FGSEA' + str(uuid.uuid4()))
 

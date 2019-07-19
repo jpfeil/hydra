@@ -206,13 +206,13 @@ import library.analysis as hy
     """
 
     data_statements = """\
-exp = pd.read_csv({exp_path}, sep='\t', index_col=0)
+exp = pd.read_csv(\"{exp_path}\", sep='\t', index_col=0)
     """.format(exp_path=exp_path)
 
     enrich_statement = """\
 res = hy.EnrichmentAnalysis(exp_path="../{exp_path}",
                         mm_path='MultiModalGenes',
-                        min_comp_filter=0.2,
+                        min_prob_filter=0.2,
                         min_effect_filter=1.0,
                         gmt_path='GO')
                             
