@@ -4,6 +4,7 @@ import collections
 import itertools
 import logging
 import matplotlib.pyplot as plt
+import multiprocessing
 import numpy as np
 import os
 import pandas as pd
@@ -34,8 +35,7 @@ class EnrichmentAnalysis(object):
                  exp_path=None,
                  min_prob_filter=0.2,
                  min_effect_filter=None,
-                 gmt_path=None,
-                 scan=False):
+                 gmt_path=None):
         """
         Performs hydra enrichment analysis.
 
@@ -54,6 +54,8 @@ class EnrichmentAnalysis(object):
             raise ValueError('Need path to original expression matrix!')
 
         self.exp = pd.read_csv(exp_path, sep='\t', index_col=0)
+        self.num_genes = self.exp.shape[0]
+        self.num_samples = self.exp.shape[1]
         self.background = list(self.exp.index.values)
         self.gmt = gmt_path
         self.min_comp_filter = min_prob_filter
@@ -195,9 +197,9 @@ class EnrichmentAnalysis(object):
 class MultivariateMixtureModel(object):
     def __init__(self,
                  data,
-                 gamma = 5.0,
-                 variance = 2.0,
-                 K = 5,
+                 gamma=5.0,
+                 variance=2.0,
+                 K=5,
                  center=False,
                  verbose=False):
 
@@ -297,7 +299,8 @@ class MultivariateMixtureModel(object):
         """
         Returns dictionary with enriched gene set terms per cluster
 
-        :param exp: Original expression matrix with all genes
+        :param exp (pd.DataFrame): Original expression matrix with all genes
+        :param gmt (str): Path to GMT file. Gene annotation must match expression matrix
         :return:
         """
         if self.clusters is None:
@@ -331,13 +334,13 @@ class MultivariateMixtureModel(object):
 
     def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05):
         """
-        Performs GSEA by normalizing cluster background. (BETA)
+        Performs N-of-1 GSEA by normalizing the sample to the cluster background. (BETA)
 
-        :param data:
-        :param constant:
-        :param gmt:
-        :param return_diff:
-        :param alpha:
+        :param data (pd.Series): Expression Series for N-of-1 sample
+        :param constant (float): PAM normalizing factor for ranking genes
+        :param gmt (str): Path to gene set file in GMT format
+        :param return_diff (bool): Removes enriched gene sets that could have been identified at the cohort level
+        :param alpha (float): P-value threshold for assessing statistical significance.
         :return:
         """
         a = self.get_assignments(data).pop()
@@ -349,7 +352,7 @@ class MultivariateMixtureModel(object):
         bsamples = self.clusters[a]
         zscore = (data - background[bsamples].mean(axis=1)) / (background[bsamples].std(axis=1) + constant)
         fgsea = n1(zscore, gmt)
-        if return_diff == True:
+        if return_diff:
             zscore2 = (data - background.mean(axis=1)) / (background.std(axis=1) + constant)
             fgsea2 = n1(zscore2, gmt)
             sig1 = fgsea[fgsea['padj'] < alpha]
@@ -358,12 +361,17 @@ class MultivariateMixtureModel(object):
             fgsea = fgsea.reindex(index)
         return a, fgsea
 
+    def cohort_gsea(self, data):
+        raise NotImplementedError('Sorry! Still working on this')
+
 
 class HClust(object):
     def __init__(self, data, method='ward', metric='euclidean'):
         self.og_data = data.copy()
         self.cluster(method=method,
                      metric=metric)
+        self.row_groups = None
+        self.col_groups = None
 
     def cluster(self, method='ward', metric='euclidean'):
         zscore = self.og_data.apply(lambda x: (x - x.mean()) / x.std(), axis=1)
@@ -442,15 +450,11 @@ class HClust(object):
         clusters = fcluster(self.col_linkage,
                             dist,
                             criterion='distance')
-
         groups = collections.defaultdict(list)
-
         for sample, cluster in zip(self.og_data.columns,
                                    clusters):
             groups[cluster].append(sample)
-
         self.col_groups = groups
-
         return groups
 
     def plot(self):
@@ -464,9 +468,46 @@ class HClust(object):
                               figsize=(10, 10))
 
 
-class HydraUnsupervisedAnalysis(object):
-    def __init__(self):
-        raise NotImplementedError
+class ScanEnrichmentAnalysis(object):
+    def __init__(self, mm_path, exp_path, gmt_path, min_prob_range=None, min_effect_filter=1.0, CPU=1):
+        """
+        Class to explore the function of multimodally expressed genes.
+
+        :param min_prob_range (iterable): Iterable containing floats between 0 and 0.5
+        """
+        self.mm_path = mm_path
+        self.exp_path = exp_path
+        self.gmt_path = gmt_path
+
+        if min_prob_range is None:
+            min_prob_range = [round(x, 2) for x in np.linspace(0.1, 0.4, 10)]
+
+        self.results = pd.DataFrame(index=min_prob_range,
+                                    columns=['num_genesets', 'gs_terms', 'gs_term_genes',
+                                             'num_genes', 'num_clusters', 'num_samples'])
+        self.min_prob_range = min_prob_range
+        self.min_effect_filter = min_effect_filter
+        self.CPU = CPU
+
+    def scan(self):
+        pool = multiprocessing.Pool(self.CPU)
+        results = []
+        for min_prob in self.min_prob_range:
+            args = (self.mm_path,
+                    self.exp_path,
+                    self.gmt_path,
+                    min_prob,
+                    self.min_effect_filter,)
+            res = pool.apply_async(_get_enrichment_analysis, args=args)
+            results.append(res)
+
+        results = [x.get() for x in results]
+
+        for res in results:
+            min_prob = res[0]
+            self.results.loc[min_prob, :] = res[1:]
+
+        return self.results
 
 
 def fancy_dendrogram(*args, **kwargs):
@@ -523,12 +564,51 @@ def n1(zscore, gmt=None):
            gmt,
            rnk_temp,
            fgsea_temp]
-
     zscore.to_csv(rnk_temp,
                   header=False,
                   sep='\t')
-
     subprocess.check_call(cmd)
 
     return pd.read_csv(fgsea_temp, index_col=0)
 
+
+def _get_enrichment_analysis(mm_path, exp_path, gmt_path, min_prob_filter, min_effect_filter,
+                             cluster=True, gamma=5.0, variance=2.0, K=5, center=True):
+
+    res = EnrichmentAnalysis(mm_path=mm_path,
+                             exp_path=exp_path,
+                             gmt_path=gmt_path,
+                             min_prob_filter=min_prob_filter,
+                             min_effect_filter=min_effect_filter)
+
+    try:
+        enriched_terms = res.get_enriched_terms()
+        terms = enriched_terms['Description'].values
+        enriched_term_genes = res.get_enriched_term_genes()
+
+        if cluster:
+            exp = pd.read_csv(exp_path, sep='\t', index_col=0)
+            clus = MultivariateMixtureModel(exp.reindex(enriched_term_genes),
+                                            gamma,
+                                            variance,
+                                            K,
+                                            center)
+            num_clusters = len(clus.clusters)
+        else:
+            num_clusters = np.nan
+        return [res.min_comp_filter,
+                len(enriched_terms),
+                '|'.join(terms),
+                '|'.join(enriched_term_genes),
+                len(res.get_enriched_term_genes()),
+                num_clusters,
+                res.num_samples]
+
+    except ValueError:
+        return [res.min_comp_filter,
+                0,
+                np.nan,
+                np.nan,
+                0,
+                np.nan,
+                res.num_samples]
