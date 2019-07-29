@@ -485,6 +485,7 @@ class ScanEnrichmentAnalysis(object):
         self.results = pd.DataFrame(index=min_prob_range,
                                     columns=['num_genesets', 'gs_terms', 'gs_term_genes',
                                              'num_genes', 'num_clusters', 'num_samples'])
+        self.results.index.name = 'min_prob_filter'
         self.min_prob_range = min_prob_range
         self.min_effect_filter = min_effect_filter
         self.CPU = CPU
