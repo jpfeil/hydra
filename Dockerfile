@@ -33,7 +33,7 @@ RUN Rscript /opt/install.R
 
 WORKDIR /opt
 RUN pip install munkres==1.0.11
-RUN git clone https://github.com/s-mawjee/bnpy.git
+COPY bnpy /opt/bnpy
 RUN cd /opt/bnpy/ && pip install -e .
 
 COPY hydra /opt/hydra

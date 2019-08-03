@@ -469,7 +469,7 @@ class HClust(object):
 
 
 class ScanEnrichmentAnalysis(object):
-    def __init__(self, mm_path, exp_path, gmt_path, min_prob_range=None, min_effect_filter=1.0, CPU=1):
+    def __init__(self, mm_path, exp_path, gmt_path, min_prob_range=None, min_effect_filter=1.0, **kwargs):
         """
         Class to explore the function of multimodally expressed genes.
 
@@ -478,17 +478,20 @@ class ScanEnrichmentAnalysis(object):
         self.mm_path = mm_path
         self.exp_path = exp_path
         self.gmt_path = gmt_path
+        self.K = kwargs['K'] if 'K' in kwargs else 1
+        self.variance = kwargs['variance'] if 'variance' in kwargs else 2.0
+        self.gamma = kwargs['gamma'] if 'gamma' in kwargs else 5.0
+        self.CPU = kwargs['CPU'] if 'CPU' in kwargs else 1
+        self.cluster = kwargs['cluster'] if 'cluster' in kwargs else True
 
         if min_prob_range is None:
             min_prob_range = [round(x, 2) for x in np.linspace(0.1, 0.4, 10)]
-
         self.results = pd.DataFrame(index=min_prob_range,
                                     columns=['num_genesets', 'gs_terms', 'gs_term_genes',
                                              'num_genes', 'num_clusters', 'num_samples'])
         self.results.index.name = 'min_prob_filter'
         self.min_prob_range = min_prob_range
         self.min_effect_filter = min_effect_filter
-        self.CPU = CPU
 
     def scan(self):
         pool = multiprocessing.Pool(self.CPU)
@@ -498,7 +501,11 @@ class ScanEnrichmentAnalysis(object):
                     self.exp_path,
                     self.gmt_path,
                     min_prob,
-                    self.min_effect_filter,)
+                    self.min_effect_filter,
+                    self.cluster,
+                    self.gamma,
+                    self.variance,
+                    self.K,)
             res = pool.apply_async(_get_enrichment_analysis, args=args)
             results.append(res)
 
@@ -507,8 +514,31 @@ class ScanEnrichmentAnalysis(object):
         for res in results:
             min_prob = res[0]
             self.results.loc[min_prob, :] = res[1:]
-
+        self.plot()
         return self.results
+
+    def plot(self):
+        fig, ax = plt.subplots(1,
+                               figsize=(6, 4))
+
+        _scan = self.results.reset_index()
+        _scan.plot(x='min_prob_filter',
+                   y='num_genes',
+                   ax=ax,
+                   legend=False)
+        ax2 = ax.twinx()
+        _scan.plot(x='min_prob_filter',
+                   y='num_clusters',
+                   ax=ax2,
+                   color='black',
+                   legend=False)
+        ax.axhline(_scan['num_samples'].unique()[0], color='red')
+        ax.set_ylabel("Number of Samples/Number of Genes")
+        ax2.set_ylabel("Number of Clusters")
+        ax.set_xlabel("Minimum Component Probability Threshold")
+        ax.legend(['#Genes', '#Samples'], loc=1)
+        ax2.legend(["#Clusters"], loc=7)
+        plt.show()
 
 
 def fancy_dendrogram(*args, **kwargs):
@@ -574,7 +604,7 @@ def n1(zscore, gmt=None):
 
 
 def _get_enrichment_analysis(mm_path, exp_path, gmt_path, min_prob_filter, min_effect_filter,
-                             cluster=True, gamma=5.0, variance=2.0, K=5, center=True):
+                             cluster=True, gamma=5.0, variance=2.0, K=1, center=True):
 
     res = EnrichmentAnalysis(mm_path=mm_path,
                              exp_path=exp_path,
