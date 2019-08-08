@@ -44,6 +44,8 @@ RUN export PYTHONPATH="$PYTHONPATH:/opt/hydra/library"
 
 RUN pip install scikit-posthocs xlrd
 
+RUN pip install guppy memory_profiler
+
 WORKDIR /data
 
 ENTRYPOINT ["python", "/opt/hydra/run.py"]

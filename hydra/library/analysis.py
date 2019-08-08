@@ -332,7 +332,7 @@ class MultivariateMixtureModel(object):
             self.cluster_features[c] = gsea.sort_values('NES', ascending=False)
         return self.cluster_features
 
-    def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05):
+    def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05, debug=False):
         """
         Performs N-of-1 GSEA by normalizing the sample to the cluster background. (BETA)
 
@@ -351,6 +351,9 @@ class MultivariateMixtureModel(object):
         data = data.reindex(background.index)
         bsamples = self.clusters[a]
         zscore = (data - background[bsamples].mean(axis=1)) / (background[bsamples].std(axis=1) + constant)
+        zscore = zscore.sort_values(ascending=False)
+        if debug:
+            print(zscore.head())
         fgsea = n1(zscore, gmt)
         if return_diff:
             zscore2 = (data - background.mean(axis=1)) / (background.std(axis=1) + constant)
@@ -541,6 +544,18 @@ class ScanEnrichmentAnalysis(object):
         plt.show()
 
 
+class SweepAnalysis(object):
+    def __init__(self, path):
+        """
+
+        :param path (str): Path to MultivariateAnalysis directory
+        """
+
+        self.path = path
+
+    def rank(self):
+        hits = pd.DataFrame(columns=['gene-set', 'num_clusters', 'maxKL'])
+
 def fancy_dendrogram(*args, **kwargs):
     """
     Code was adapted from:
@@ -587,9 +602,8 @@ def n1(zscore, gmt=None):
 
     if gmt is None:
         gmt = os.path.join(src,
-                           'data',
-                           'Human_GO_AllPathways_no_GO_iea_October_01_2018_symbol.gmt')
-
+                           'gene-sets',
+                           'Human_GOBP_AllPathways_no_GO_iea_December_01_2018_symbol.gmt')
     cmd = ['Rscript',
            os.path.join(src, 'bin', 'fgsea.R'),
            gmt,
@@ -643,3 +657,24 @@ def _get_enrichment_analysis(mm_path, exp_path, gmt_path, min_prob_filter, min_e
                 0,
                 np.nan,
                 res.num_samples]
+
+
+def kl(m1, S1, m2, S2):
+    """
+    https://stats.stackexchange.com/questions/60680/kl-divergence-between-two-multivariate-gaussians
+
+    :param m1:
+    :param S1:
+    :param m2:
+    :param S2:
+    :return:
+    """
+    m1 = m1.reshape(len(m1), 1)
+    m2 = m2.reshape(len(m2), 1)
+    detS2 = np.linalg.det(S2)
+    detS1 = np.linalg.det(S1)
+    d = len(m1)
+    invS2 = np.linalg.inv(S2)
+    trS2S1 = np.trace(invS2 * S1)
+    mah = np.matmul(np.matmul((m2 - m1).T, invS2), (m2 - m1))
+    return float(0.5 * (np.log(detS2 / detS1) - d + trS2S1 + mah))

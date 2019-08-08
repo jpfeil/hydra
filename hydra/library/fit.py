@@ -1,3 +1,4 @@
+#!/usr/bin/env python2.7
 import os
 import re
 import bnpy
@@ -69,6 +70,7 @@ def subprocess_fit(name,
     :param timeout_sec:
     :return:
     """
+    name = re.sub(r'[^\w\d-]', '_', name)
 
     workdir = tempfile.mkdtemp(prefix="%s_" % name)
     output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,delete,shuffle/'.format(K=K,
@@ -96,6 +98,7 @@ def subprocess_fit(name,
                     --ECovMat eye
                     --moves birth,merge,delete,shuffle
                     --output_path {output}
+                    --maxWorkers 1
           """.format(data=csv_file_path,
                      K=K,
                      nLap=nLap,
@@ -113,8 +116,12 @@ def subprocess_fit(name,
     if m:
         converged = True
 
-    hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
-                                                          prefix='Best')
+    try:
+        hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
+                                                              prefix='Best')
+    except IOError:
+        print(stdout)
+        raise ValueError("%s model not found!" % name)
 
     params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: {b}\n" \
              "mStart: {m}\ndStart: {d}\nnLap: {n}".format(G=gamma,
@@ -126,10 +133,8 @@ def subprocess_fit(name,
                                                           n=nLap)
     if not save_output:
         shutil.rmtree(workdir)
-
     else:
         print("Output:\n%s" % workdir)
-
     return hmodel, converged, params, stdout
 
 
