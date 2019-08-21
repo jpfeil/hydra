@@ -419,7 +419,7 @@ class HClust(object):
         groups = collections.defaultdict(list)
 
         for gene, cluster in zip(self.og_data.index.values,
-                                   clusters):
+                                 clusters):
             groups[cluster].append(gene)
 
         self.row_groups = groups

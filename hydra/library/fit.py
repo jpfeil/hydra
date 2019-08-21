@@ -165,7 +165,7 @@ def get_assignments(model, data):
     return asnmts
 
 
-def apply_multivariate_model(input, args, output, src, name='MultivariateModel'):
+def apply_multivariate_model(input, args, output, name='MultivariateModel'):
     """
 
     :param input:
@@ -176,6 +176,8 @@ def apply_multivariate_model(input, args, output, src, name='MultivariateModel')
     """
     logger = logging.getLogger('root')
     logger.info("Centering input to multivariate clustering.")
+
+    name = re.sub(r'[^\w\d-]', '_', name)
 
     center = input.apply(lambda x: x - x.mean(), axis=1)
 
