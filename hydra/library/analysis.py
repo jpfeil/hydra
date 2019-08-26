@@ -8,17 +8,21 @@ import multiprocessing
 import numpy as np
 import os
 import pandas as pd
+import pyximport
 import seaborn as sns
 import subprocess
 import tempfile
 import uuid
+
+pyximport.install(setup_args={'include_dirs': [np.get_include(), 'library']})
+import rand
 
 from scipy.stats import ttest_ind
 from scipy.spatial import distance
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, dendrogram
 
-from library.fit import run
+from library.fit import run, get_assignments
 
 src = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -27,6 +31,36 @@ pth = os.path.join(src, 'data/chrY-genes.txt')
 with open(pth) as f:
     for line in f:
         y_genes.add(line.strip())
+
+class RandAnalysis(object):
+    def __init__(self, mm_path, exp):
+        self.mm_path = mm_path
+        self.data = exp
+        self.logger = logging.getLogger('root')
+
+    def group(self, CPU=1):
+        pool = multiprocessing.Pool(CPU)
+
+        results = []
+        genes = []
+        self.logger.debug("Started loading gene-level models")
+        for gene in os.listdir(self.mm_path):
+            genes.append(gene)
+            res = pool.apply_async(label,
+                                   args=(os.path.join(self.mm_path, gene),
+                                         self.data.loc[gene, :].values))
+            results.append((gene, res.get()))
+
+        self.logger.debug("Instantiated Rand index matrix")
+        rindex = pd.DataFrame(index=genes, columns=genes)
+        labels = {}
+        for g1, g2 in itertools.combinations(results, 2):
+            labels[(g1[0], g2[0])] = [g1[1], g2[1]]
+        rands = pool.imap(rand.randi, labels.values())
+        for (g1, g2), score in zip(labels.keys(), rands):
+            rindex.loc[g1, g2] = score
+            rindex.loc[g2, g1] = score
+        return rindex
 
 
 class EnrichmentAnalysis(object):
@@ -678,3 +712,11 @@ def kl(m1, S1, m2, S2):
     trS2S1 = np.trace(invS2 * S1)
     mah = np.matmul(np.matmul((m2 - m1).T, invS2), (m2 - m1))
     return float(0.5 * (np.log(detS2 / detS1) - d + trS2S1 + mah))
+
+
+def label(pth, data):
+    gene = os.path.basename(pth)
+    model = bnpy.ioutil.ModelReader.load_model_at_prefix(pth,
+                                                             prefix=gene)
+    xdata = bnpy.data.XData(data.reshape(len(data), 1))
+    return get_assignments(model, xdata)
