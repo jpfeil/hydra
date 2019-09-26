@@ -62,7 +62,7 @@ def subprocess_fit(name,
     """
 
     :param name:
-    :param dataset:
+    :param dataset: bnpy.data.Xdata object
     :param gamma:
     :param sF:
     :param K:
@@ -70,6 +70,8 @@ def subprocess_fit(name,
     :param timeout_sec:
     :return:
     """
+    logger = logging.getLogger('root')
+
     name = re.sub(r'[^\w\d-]', '_', name)
 
     workdir = tempfile.mkdtemp(prefix="%s_" % name)
@@ -79,6 +81,8 @@ def subprocess_fit(name,
     output_path = os.path.join(workdir, output_dir)
 
     csv_file_path = os.path.join(workdir, "%s.csv" % name)
+    assert dataset.dim > 0, 'Dataset has not dimension'
+    assert dataset.get_size() > 2, 'Dataset needs more than two observations!'
     dataset.to_csv(csv_file_path)
 
     cmd = """
@@ -98,7 +102,6 @@ def subprocess_fit(name,
                     --ECovMat eye
                     --moves birth,merge,delete,shuffle
                     --output_path {output}
-                    --maxWorkers 1
           """.format(data=csv_file_path,
                      K=K,
                      nLap=nLap,
@@ -115,6 +118,10 @@ def subprocess_fit(name,
     m = converged_regex.search(stdout)
     if m:
         converged = True
+
+    else:
+        logger.debug(stdout)
+        logger.debug(stderr)
 
     try:
         hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),

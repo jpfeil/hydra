@@ -8,6 +8,7 @@ RUN apt-get update --fix-missing && \
                        wget \
                        git \
                        libgl1-mesa-glx \
+                       mesa-common-dev \
                        libxml2 \
                        libxml2-dev \
                        gfortran \
@@ -21,32 +22,32 @@ RUN apt-get update --fix-missing && \
 # Install miniconda
 RUN wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh -O ~/miniconda.sh
 RUN bash ~/miniconda.sh -b -p $HOME/miniconda
-
 ENV PATH=/root/miniconda/bin:$PATH
+RUN export PATH="/root/miniconda/bin:$PATH"
 
+# Install necessary python libraries
 RUN conda update -y conda
-
 RUN conda install -y seaborn numpy pandas scipy jupyter 
+RUN conda install -y -c anaconda jupyter_client 
+RUN pip install scikit-posthocs xlrd ipykernel
 
+# Install necessary R libraries
 COPY hydra/bin/install.R /opt/
 RUN Rscript /opt/install.R
+RUN R -e "Sys.setenv(PATH = paste('/root/miniconda/bin', Sys.getenv('PATH'), sep = ':')); library(IRkernel); IRkernel::installspec()"
 
+# Install bnpy
 WORKDIR /opt
 RUN pip install munkres==1.0.11
 COPY bnpy /opt/bnpy
 RUN cd /opt/bnpy/ && pip install -e .
 
+# Install hydra
 COPY hydra /opt/hydra
-
 ENV HYDRA_SRC=/opt/hydra
-
 RUN export PYTHONPATH="$PYTHONPATH:/opt/hydra/library"
 
-RUN pip install scikit-posthocs xlrd
-
-RUN pip install guppy memory_profiler
-
+# Set workdir and entrypoint
 WORKDIR /data
-
-ENTRYPOINT ["python", "/opt/hydra/run.py"]
+ENTRYPOINT ["python", "/opt/hydra/hydra"]
 CMD ["-h"]

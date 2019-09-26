@@ -1,7 +1,13 @@
-library("devtools")
-devtools::install_github("gaborcsardi/pkgconfig")
-devtools::install_github("igraph/rigraph")
-devtools::install_github('thomasp85/ggraph')
+# Required for survminer
+install.packages("ggplot2", repos='http://cran.us.r-project.org')
+devtools::install_url("https://github.com/wilkelab/cowplot/archive/0.9.0.zip")
+install.packages("survminer", repos='http://cran.us.r-project.org')
+install.packages('IRkernel', repos='http://cran.us.r-project.org')
+install.packages('cluster', repos='http://cran.us.r-project.org')
+install.packages('factoextra', repos='http://cran.us.r-project.org')
+install.packages('NB', repos='http://cran.us.r-project.org')
+install.packages('tidyverse', repos='http://cran.us.r-project.org')
+
 
 source("https://bioconductor.org/biocLite.R")
 biocLite("annotate")
@@ -12,3 +18,5 @@ biocLite("M3C")
 biocLite("org.Hs.eg.db")
 biocLite("clusterProfiler")
 biocLite("DOSE")
+biocLite("eisa")
+biocLite("fgsea")

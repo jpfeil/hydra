@@ -8,14 +8,10 @@ import multiprocessing
 import numpy as np
 import os
 import pandas as pd
-import pyximport
 import seaborn as sns
 import subprocess
 import tempfile
 import uuid
-
-pyximport.install(setup_args={'include_dirs': [np.get_include(), 'library']})
-import rand
 
 from scipy.stats import ttest_ind
 from scipy.spatial import distance
@@ -23,6 +19,7 @@ from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, dendrogram
 
 from library.fit import run, get_assignments
+from library import cyrand
 
 src = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -38,28 +35,25 @@ class RandAnalysis(object):
         self.data = exp
         self.logger = logging.getLogger('root')
 
-    def group(self, CPU=1):
-        pool = multiprocessing.Pool(CPU)
-
+    def group(self):
         results = []
         genes = []
-        self.logger.debug("Started loading gene-level models")
+        self.logger.info("Started loading gene-level models")
         for gene in os.listdir(self.mm_path):
             genes.append(gene)
-            res = pool.apply_async(label,
-                                   args=(os.path.join(self.mm_path, gene),
-                                         self.data.loc[gene, :].values))
-            results.append((gene, res.get()))
+            res = label(os.path.join(self.mm_path, gene),
+                        self.data.loc[gene, :].values)
+            results.append((gene, np.array(res)))
 
-        self.logger.debug("Instantiated Rand index matrix")
+        self.logger.info("Instantiated Rand index matrix: %d x %d" % (len(genes), len(genes)))
         rindex = pd.DataFrame(index=genes, columns=genes)
-        labels = {}
-        for g1, g2 in itertools.combinations(results, 2):
-            labels[(g1[0], g2[0])] = [g1[1], g2[1]]
-        rands = pool.imap(rand.randi, labels.values())
-        for (g1, g2), score in zip(labels.keys(), rands):
-            rindex.loc[g1, g2] = score
-            rindex.loc[g2, g1] = score
+        for (g1, l1), (g2, l2) in itertools.combinations(results, 2):
+            rindex.loc[g1, g2] = cyrand.ri(l1, l2)
+
+        # Fill in lower half of the matrix
+        lower = np.ones(rindex.shape, dtype='bool')
+        lower[np.triu_indices(len(rindex))] = False
+        rindex[lower] = rindex.T
         return rindex
 
 
@@ -308,9 +302,11 @@ class MultivariateMixtureModel(object):
         if self.center:
             data = data.sub(self.og_data.mean(axis=1), axis=0)
 
+        # If the data is one-dimensional, then reshape
         if data.ndim == 1:
             data = data.values.reshape(1, data.shape[0])
 
+        # Else take the transpose
         else:
             data = data.T.values
 
@@ -366,7 +362,7 @@ class MultivariateMixtureModel(object):
             self.cluster_features[c] = gsea.sort_values('NES', ascending=False)
         return self.cluster_features
 
-    def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05, debug=False):
+    def sub_cluster_gsea(self, data, constant=0.05, gmt=None, return_diff=False, alpha=0.05, debug=False, remove=False):
         """
         Performs N-of-1 GSEA by normalizing the sample to the cluster background. (BETA)
 
@@ -382,15 +378,21 @@ class MultivariateMixtureModel(object):
             raise ValueError("Sample did not place in a cluster.")
 
         background = self.og_data
+
+        # Remove sample if it is in the background cohort
+        if remove:
+            background.drop(remove, axis=1, inplace=True)
+
         data = data.reindex(background.index)
         bsamples = self.clusters[a]
-        zscore = (data - background[bsamples].mean(axis=1)) / (background[bsamples].std(axis=1) + constant)
+        zscore = (data.sub(background[bsamples].mean(axis=1), axis=0)) / (background[bsamples].std(axis=1) + constant)
         zscore = zscore.sort_values(ascending=False)
         if debug:
             print(zscore.head())
         fgsea = n1(zscore, gmt)
         if return_diff:
-            zscore2 = (data - background.mean(axis=1)) / (background.std(axis=1) + constant)
+            back = [x for x in background.columns if x not in bsamples]
+            zscore2 = (data.sub(background[back].mean(axis=1), axis=0)) / (background[back].std(axis=1) + constant)
             fgsea2 = n1(zscore2, gmt)
             sig1 = fgsea[fgsea['padj'] < alpha]
             sig2 = fgsea2[fgsea2['padj'] < alpha]
