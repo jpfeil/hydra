@@ -27,6 +27,8 @@ RUN export PATH="/root/miniconda/bin:$PATH"
 
 # Install necessary python libraries
 RUN conda update -y conda
+# https://github.com/open-mmlab/mmdetection/issues/1424
+RUN conda install -y intel-openmp=2019.4
 RUN conda install -y seaborn numpy pandas scipy jupyter 
 RUN conda install -y -c anaconda jupyter_client 
 RUN pip install scikit-posthocs xlrd ipykernel

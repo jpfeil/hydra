@@ -1,11 +1,8 @@
 #!/usr/bin/env python2.7
 import argparse
-import bnpy
 import datetime
 import logging
 import math
-import multiprocessing
-import numpy as np
 import os
 import pandas as pd
 import subprocess
@@ -14,7 +11,8 @@ import textwrap
 import re
 
 from library.analysis import EnrichmentAnalysis
-from library.fit import subprocess_fit, apply_multivariate_model
+from library.filter import filter, filter_gene_sets
+from library.fit import apply_multivariate_model
 from library.notebook import enrichment_notebook
 from library.utils import mkdir_p, \
                           get_genesets, \
@@ -25,9 +23,6 @@ from library.utils import mkdir_p, \
 date = str(datetime.date.today())
 src = os.path.dirname(os.path.abspath(__file__))
 
-# Global variable for keeping track of multimodally expressed genes
-manager = multiprocessing.Manager()
-analyzed = manager.dict()
 
 def convert_size(size_bytes):
     """
@@ -44,240 +39,6 @@ def convert_size(size_bytes):
     p = math.pow(1024, i)
     s = round(size_bytes / p, 2)
     return "%s %s" % (s, size_name[i])
-
-
-def fit_gene(gene, sensitive=False):
-    """
-
-    :param gene:
-    :param workers:
-    :param sensitive:
-    :return:
-    """
-    # Center the expression data. This data should not be
-    # centered before this step
-    data = matrx.loc[gene, :].values
-    assert len(data) > 1, 'Dataset needs at least 2 observations!'
-
-    mean = np.mean(data)
-    data = data - mean
-
-    # Reshape the data so that it is compatible with the
-    # mixture model
-    data = data.reshape(len(data), 1)
-
-    # Convert data to a bnpy XData object
-    X = bnpy.data.XData(data)
-
-    # Default parameters
-    bstart = 10
-    mstart = 10
-    dstart = 20
-    K = 1
-    sF = 2.0
-
-    # Run with sensitive parameterization
-    if sensitive is True:
-        bstart = 0
-        mstart = 2
-        dstart = 2
-        K = 5
-        sF = 1.0
-
-    # Run the parallel fit model
-    return subprocess_fit(gene,
-                          X,
-                          gamma=5.0,
-                          K=K,
-                          sF=sF,
-                          bstart=bstart,
-                          mstart=mstart,
-                          dstart=dstart)
-
-
-def filter_gene(gene,
-                gene_mean_filter=None,
-                min_prob_filter=None,
-                output_dir=None,
-                sensitive=False,
-                mm_path=None):
-    """
-    Filters genes using multiomodal and simple expression filters.
-
-    :param gene: gene name
-    :param data: expression data
-    :param covariate: covariate data
-    :param min_prob_filter: minimium probability filter
-    :param output_dir: path to output directory
-    :param sensitive
-    :return:
-    """
-    logger = logging.getLogger('root')
-    logger.debug("Filtering %s" % gene)
-
-    save = True
-    # If we have analyzed this sample before,
-    # then just take that value and save some time
-    if gene in analyzed:
-        if analyzed[gene][1]:
-            logger.debug("Gene %s was previously found to be multimodal" % gene)
-        else:
-            logger.debug("Gene %s was previously removed" % gene)
-        return analyzed[gene]
-
-    mean = np.mean(matrx.loc[gene, :].values)
-
-    # Skip Genes that have a mean below the mean filter
-    if mean < gene_mean_filter:
-        logger.debug("Gene %s was removed by mean filter." % gene)
-        return gene, False
-
-    converged = False
-    params = None
-    stdout = None
-
-    model_pth = os.path.join(mm_path, gene)
-    if mm_path:
-        try:
-            logger.info("Loading fit:\n%s" % model_pth)
-            model = bnpy.ioutil.ModelReader.load_model_at_prefix(model_pth,
-                                                                 prefix=gene)
-            save = False
-        except IOError:
-            logger.info("Couldn't find model:\n%s" % model_pth)
-            model, converged, params, stdout = fit_gene(gene,
-                                                        sensitive=sensitive)
-
-    else:
-        model, converged, params, stdout = fit_gene(gene,
-                                                    sensitive=sensitive)
-
-    probs = model.allocModel.get_active_comp_probs()
-    min_prob = np.min(probs)
-
-    # Do not consider genes where the model did not converge
-    if not converged:
-        logger.info("Model did not converge for %s" % gene)
-        return gene, False
-
-    # Remove genes that have a low component frequency
-    elif min_prob < min_prob_filter:
-        logger.info("Gene %s was removed by min prob filter." % gene)
-        analyzed[gene] = (gene, False)
-        return gene, False
-
-    elif len(probs) > 1:
-        if save and output_dir:
-            _dir = os.path.join(output_dir, 'MultiModalGenes', gene)
-            assert not os.path.exists(_dir), 'Tried to overwrite previous gene-level fit!'
-            mkdir_p(_dir)
-            bnpy.ioutil.ModelWriter.save_model(model,
-                                               _dir,
-                                               prefix=gene)
-
-            pth = os.path.join(_dir, "PARAMS")
-            with open(pth, "w") as f:
-                f.write(params)
-
-            pth = os.path.join(_dir, "STDOUT")
-            with open(pth, "w") as f:
-                f.write(stdout)
-
-        analyzed[gene] = (gene, True)
-        return gene, True
-
-    elif len(probs) == 1:
-        logger.debug("Gene %s was removed because it is unimodal" % gene)
-        analyzed[gene] = (gene, False)
-        return gene, False
-
-    else:
-        raise ValueError()
-
-
-def filter_gene_set(lst,
-                    CPU=1,
-                    gene_mean_filter=None,
-                    min_prob_filter=None,
-                    output_dir=None,
-                    sensitive=False,
-                    mm_path=None):
-    """
-    Applies non-parametric mixture model to expression data. Can optionally add
-    a covariate (e.g. survival, IC50) to select genes that vary with a variable of
-    interest.
-
-    Loops over a list of genes and selects rows in the expression matrix. Creates
-    a bivariate data set for analyzing genes that covary with a variable of interest.
-
-    :param lst (list): list of genes
-    :param covariate (np.array): covariate vector
-    :param CPU (int): number of CPUs available
-    :param gene_mean_filter (float): mean threshold for filtering genes
-    :param min_prob_filter (float): min probability threshold for filtering genes
-    :param output_dir (str): path to output directory for saving intermediate files
-    :param sensitive (bool): Boolean to determine if mixture model is run in sensitive mode
-    :return:
-    """
-    logger = logging.getLogger('root')
-    logger.debug("Filtering genes...")
-
-    if sensitive:
-        logger.debug('SENSITIVE MODE...')
-
-    pool = multiprocessing.Pool(processes=CPU)
-    results = []
-    for gene in lst:
-        res = pool.apply_async(filter_gene,
-                               args=(gene,
-                                     gene_mean_filter,
-                                     min_prob_filter,
-                                     output_dir,
-                                     sensitive,
-                                     mm_path))
-        results.append(res)
-
-    results = [x.get() for x in results]
-    pool.close()
-    pool.join()
-
-    for gene, multimodal in results:
-        if multimodal:
-            yield gene
-
-
-def filter_gene_sets(genesets, args):
-    """
-    Takes gene sets and filters down to the multimodally expressed genes
-
-    :param genesets (dict): Dictionary containing gene sets
-    :param args (argparse.Namespace): Input parameters
-    :return: Filtered gene sets
-    :rtype: collections.defaultdict
-    """
-    logger = logging.getLogger('root')
-    for gs, genes in genesets.items():
-        logger.debug(gs)
-        start = len(genes)
-        res = filter_gene_set(list(genes),
-                              CPU=args.CPU,
-                              gene_mean_filter=args.min_mean_filter,
-                              min_prob_filter=args.min_prob_filter,
-                              output_dir=args.output_dir,
-                              sensitive=args.sensitive,
-                              mm_path=args.mm_path)
-        res = list(set(res))
-        end = len(res)
-
-        logger.info("Filtering: {gs} went from {x} to {y} genes".format(gs=gs,
-                                                                        x=start,
-                                                                        y=end))
-        if end < args.min_num_filter:
-            logger.info("Skipping {gs} because there "
-                         "are not enough genes to cluster".format(gs=gs))
-            continue
-
-        yield gs, res
 
 
 def gene_set_clustering(genesets, args):
@@ -306,7 +67,7 @@ def gene_set_clustering(genesets, args):
         apply_multivariate_model(training, args, gsdir, name=gs)
 
 
-def enrichment_analysis(args):
+def enrichment_analysis(matrx, args):
     """
     Runs unsuperivsed enrichment analysis. Will run the multimodal filter
     unless a path to the multimodal output directory is provided.
@@ -315,27 +76,8 @@ def enrichment_analysis(args):
     :return:
     """
     logger = logging.getLogger('root')
-    genes = matrx.index.values
     if args.mm_path is None:
-        start = len(genes)
-        res = filter_gene_set(list(genes),
-                              CPU=args.CPU,
-                              gene_mean_filter=args.min_mean_filter,
-                              min_prob_filter=args.min_prob_filter,
-                              output_dir=args.output_dir,
-                              sensitive=args.sensitive)
-        end = len(res)
-
-        logger.info("Filtering: {gs} went from {x} to {y} genes".format(gs='Enrichment Analysis',
-                                                                        x=start,
-                                                                        y=end))
-        _ = filter_gene_set(list(genes),
-                             CPU=args.CPU,
-                             gene_mean_filter=args.min_mean_filter,
-                             min_prob_filter=args.min_prob_filter,
-                             output_dir=args.output_dir,
-                             sensitive=args.sensitive)
-
+        filter(matrx, args)
         mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
 
     elif os.path.exists(args.mm_path):
@@ -354,7 +96,6 @@ def enrichment_analysis(args):
     mkdir_p(output)
 
     terms = post.get_enriched_terms()
-
     if terms.shape[0] == 0:
         logger.info("No enriched terms were found!\n"
                     "Try decreasing the min-prob-filter parameter.\n"
@@ -366,35 +107,9 @@ def enrichment_analysis(args):
         terms.to_csv(pth, sep='\t')
 
     training = matrx.reindex(post.get_enriched_term_genes())
-
     pth = os.path.join(output, 'training-data.tsv')
     training.to_csv(pth, sep='\t')
-
     apply_multivariate_model(training, args, output, src)
-
-
-def filter(args):
-    """
-    Runs the multimodal filter and stops
-
-    :param args argparse.Namespace: Pipeline configuration namespace
-    :return: None
-    """
-    logger = logging.getLogger('root')
-    logger.info("Running multimodal filter")
-    genes = matrx.index.values
-    res = filter_gene_set(list(genes),
-                          CPU=args.CPU,
-                          gene_mean_filter=args.min_mean_filter,
-                          min_prob_filter=args.min_prob_filter,
-                          output_dir=args.output_dir,
-                          sensitive=args.sensitive,
-                          mm_path=args.mm_path)
-    res = list(set(res))
-    logger.info("Found %d multimodally distributed genes" % len(res))
-    mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
-    assert os.path.exists(mm_genes), 'No output generated!'
-    logger.info('Multimodal genes are located here:\n%s' % mm_genes)
 
 
 def sweep(args):
@@ -433,7 +148,7 @@ def sweep(args):
     gene_set_clustering(genesets, args)
 
 
-def enrich(args):
+def enrich(matrx, args):
     """
 
     :param args:
@@ -442,12 +157,12 @@ def enrich(args):
     logger = logging.getLogger('root')
     if args.gmt is not None:
         logger.info("Starting unsupervised enrichment analysis:\n%s" % args.gmt)
-        enrichment_analysis(args)
+        enrichment_analysis(matrx, args)
 
     elif args.gmt is None and args.go_enrichment:
         logger.info("Starting unsupervised enrichment analysis using clusterProfiler GO analysis")
         args.gmt = "GO"
-        enrichment_analysis(args)
+        enrichment_analysis(matrx, args)
 
     else:
         raise ValueError("Either specify a GMT file or use the --go-enrichment flag!")
@@ -655,6 +370,10 @@ def main():
                         sep='\t',
                         index_col=0)
 
+    # Remove Nans
+    logger.info("Removing NaNs")
+    matrx = matrx.dropna()
+
     # Remove duplicates in index
     logger.info("Removing duplicate genes:")
     logger.info("Number of genes: %d" % matrx.shape[0])
@@ -671,12 +390,15 @@ def main():
             logger.info("Gene names cannot contain quotation marks! %s" % gene)
             drop_genes.add(gene)
 
+        if pd.isnull(gene):
+            drop_genes.add(gene)
+
     matrx = matrx.drop(list(drop_genes), axis=0)
     logger.info("Number of genes after "
                 "removing misformatted genes: %d" % matrx.shape[0])
 
     if args.mode == 'filter':
-        filter(args)
+        filter(matrx, args)
 
     elif args.mode == 'sweep':
         sweep(args)

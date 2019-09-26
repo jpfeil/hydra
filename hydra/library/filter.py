@@ -64,8 +64,8 @@ def get_gene_fit(gene,
     params = None
     stdout = None
 
-    model_pth = os.path.join(mm_path, gene)
     if mm_path:
+        model_pth = os.path.join(mm_path, gene)
         try:
             logger.info("Loading fit:\n%s" % model_pth)
             model = bnpy.ioutil.ModelReader.load_model_at_prefix(model_pth,
@@ -115,6 +115,7 @@ def get_gene_fit(gene,
             with open(pth, "w") as f:
                 f.write(stdout)
 
+        logger.debug("Gene %s is multimodal" % gene)
         analyzed[gene] = (gene, True)
         return gene, True
 
@@ -246,6 +247,7 @@ def filter(matrx, args):
     logger.info("Running multimodal filter")
     genes = matrx.index.values
     res = filter_gene_set(list(genes),
+                          matrx,
                           gene_mean_filter=args.min_mean_filter,
                           min_prob_filter=args.min_prob_filter,
                           output_dir=args.output_dir,

@@ -83,6 +83,7 @@ def subprocess_fit(name,
     csv_file_path = os.path.join(workdir, "%s.csv" % name)
     assert dataset.dim > 0, 'Dataset has not dimension'
     assert dataset.get_size() > 2, 'Dataset needs more than two observations!'
+    logger.debug("Gene %s\nSize %d\n" % (name, dataset.get_size()))
     dataset.to_csv(csv_file_path)
 
     cmd = """
@@ -114,6 +115,10 @@ def subprocess_fit(name,
 
     stdout, stderr = run(shlex.split(cmd), timeout_sec=timeout_sec)
 
+    logger.debug(cmd)
+    logger.debug(stdout)
+    logger.debug(stderr)
+
     converged = False
     m = converged_regex.search(stdout)
     if m:
@@ -142,7 +147,7 @@ def subprocess_fit(name,
         shutil.rmtree(workdir)
     else:
         print("Output:\n%s" % workdir)
-    return hmodel, converged, params, stdout
+    return hmodel, converged, params, stdout, stderr
 
 
 def get_assignments(model, data):
