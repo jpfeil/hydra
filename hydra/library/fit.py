@@ -219,13 +219,13 @@ def apply_multivariate_model(input, args, output, name='MultivariateModel'):
                  "nLaps: %d" % (gamma, sF, K, nLap))
 
     # Fit multivariate model
-    hmodel, converged, params, stdout = subprocess_fit(name,
-                                                       dataset,
-                                                       gamma,
-                                                       sF,
-                                                       K,
-                                                       nLap=nLap,
-                                                       timeout_sec=args.max_fit_time)
+    hmodel, converged, params, stdout, stderr = subprocess_fit(name,
+                                                               dataset,
+                                                               gamma,
+                                                               sF,
+                                                               K,
+                                                               nLap=nLap,
+                                                               timeout_sec=args.max_fit_time)
 
     if converged is False:
         logging.info("WARNING: Multivariate model did not converge!")

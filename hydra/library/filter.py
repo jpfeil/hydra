@@ -2,6 +2,7 @@ import bnpy
 import logging
 import os
 import multiprocessing
+import shutil
 import numpy as np
 
 from library.fit import subprocess_fit
@@ -43,7 +44,8 @@ def get_gene_fit(gene,
                  min_prob_filter=None,
                  output_dir=None,
                  sensitive=False,
-                 mm_path=None):
+                 mm_path=None,
+                 overwrite=False):
     """
     Filters genes using multiomodal and simple expression filters.
 
@@ -56,7 +58,7 @@ def get_gene_fit(gene,
     :return:
     """
     logger = logging.getLogger('root')
-    logger.debug("Filtering %s" % gene)
+    logger.debug("\nFiltering %s" % gene)
 
     save = True
 
@@ -70,6 +72,7 @@ def get_gene_fit(gene,
             logger.info("Loading fit:\n%s" % model_pth)
             model = bnpy.ioutil.ModelReader.load_model_at_prefix(model_pth,
                                                                  prefix=gene)
+            converged = True       # We don't save models that don't converge
             save = False
 
         except IOError:
@@ -101,6 +104,10 @@ def get_gene_fit(gene,
     elif len(probs) > 1:
         if save and output_dir:
             _dir = os.path.join(output_dir, 'MultiModalGenes', gene)
+            if os.path.exists(_dir) and overwrite:
+                logger.info("Erasing previous fit %s" % gene)
+                shutil.rmtree(_dir)
+
             assert not os.path.exists(_dir), 'Tried to overwrite previous gene-level fit!'
             mkdir_p(_dir)
             bnpy.ioutil.ModelWriter.save_model(model,
@@ -130,11 +137,13 @@ def get_gene_fit(gene,
 
 def filter_gene_set(lst,
                     expression,
+                    CPU=1,
                     gene_mean_filter=None,
                     min_prob_filter=None,
                     output_dir=None,
                     sensitive=False,
-                    mm_path=None):
+                    mm_path=None,
+                    overwrite=False):
     """
     Applies non-parametric mixture model to expression data. Can optionally add
     a covariate (e.g. survival, IC50) to select genes that vary with a variable of
@@ -158,6 +167,8 @@ def filter_gene_set(lst,
     if sensitive:
         logger.debug('SENSITIVE MODE...')
 
+    pool = multiprocessing.Pool(CPU)
+    results = []
     for gene in lst:
         # If we have analyzed this sample before,
         # then just take that value and save some time
@@ -193,17 +204,27 @@ def filter_gene_set(lst,
         logger.debug("Gene: %s\nnDim %d\n Size %d\n" % (gene,
                                                         X.dim,
                                                         X.get_size()))
-        _, multimodal = get_gene_fit(gene,
+
+        res = pool.apply_async(get_gene_fit,
+                               args=(gene,
                                      X,
                                      min_prob_filter,
                                      output_dir,
                                      sensitive,
-                                     mm_path)
+                                     mm_path,
+                                     overwrite,))
+        results.append(res)
+
+    output = [r.get() for r in results]
+    pool.close()
+    pool.join()
+
+    for gene, multimodal in output:
         if multimodal:
             yield gene
 
 
-def filter_gene_sets(genesets, args):
+def filter_gene_sets(matrx, genesets, args):
     """
     Takes gene sets and filters down to the multimodally expressed genes
 
@@ -217,11 +238,14 @@ def filter_gene_sets(genesets, args):
         logger.debug(gs)
         start = len(genes)
         res = filter_gene_set(list(genes),
+                              matrx,
+                              CPU=args.CPU,
                               gene_mean_filter=args.min_mean_filter,
                               min_prob_filter=args.min_prob_filter,
                               output_dir=args.output_dir,
                               sensitive=args.sensitive,
-                              mm_path=args.mm_path)
+                              mm_path=args.mm_path,
+                              overwrite=args.overwrite)
         res = list(set(res))
         end = len(res)
 
@@ -245,16 +269,35 @@ def filter(matrx, args):
     """
     logger = logging.getLogger('root')
     logger.info("Running multimodal filter")
+
+    if args.mm_path:
+        logger.info("Loading previous fits...")
+        rec = os.path.join(os.path.dirname(args.mm_path), 'ANALYZED')
+        with open(rec) as f:
+            for line in f:
+                gene, result = line.strip().split('\t')
+                analyzed[gene] = (gene, bool(int(result)))
+
     genes = matrx.index.values
     res = filter_gene_set(list(genes),
                           matrx,
+                          CPU=args.CPU,
                           gene_mean_filter=args.min_mean_filter,
                           min_prob_filter=args.min_prob_filter,
                           output_dir=args.output_dir,
                           sensitive=args.sensitive,
-                          mm_path=args.mm_path)
+                          mm_path=args.mm_path,
+                          overwrite=args.overwrite)
     res = list(set(res))
     logger.info("Found %d multimodally distributed genes" % len(res))
-    mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
+    with open(os.path.join(args.output_dir, 'ANALYZED'), 'w') as f:
+        for key, (_, value) in analyzed.items():
+            f.write("%s\t%d\n" % (key, int(value)))
+
+    if args.mm_path:
+        mm_genes = args.mm_path
+    else:
+        mm_genes = os.path.join(args.output_dir, 'MultiModalGenes')
     assert os.path.exists(mm_genes), 'No output generated!'
     logger.info('Multimodal genes are located here:\n%s' % mm_genes)
+

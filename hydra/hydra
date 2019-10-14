@@ -41,7 +41,7 @@ def convert_size(size_bytes):
     return "%s %s" % (s, size_name[i])
 
 
-def gene_set_clustering(genesets, args):
+def gene_set_clustering(matrx, genesets, args):
     """
     Iterate over the gene sets and select for multimodally expressed genes
 
@@ -50,7 +50,7 @@ def gene_set_clustering(genesets, args):
     :param covariate:
     :return:
     """
-    for gs, genes in filter_gene_sets(genesets, args):
+    for gs, genes in filter_gene_sets(matrx, genesets, args):
         gs = re.sub('[^\w\d-]', '_', gs)
 
         # Make directory for output
@@ -112,7 +112,7 @@ def enrichment_analysis(matrx, args):
     apply_multivariate_model(training, args, output, src)
 
 
-def sweep(args):
+def sweep(matrx, args):
     """
     Applies multivariate clustering of multimodally expressed genes across
     input gene set database. Use regex to select specific gene sets.
@@ -145,7 +145,7 @@ def sweep(args):
     genesets = find_aliases(genesets, alias_mapper, matrx.index)
 
     logger.info("Starting gene set clustering analysis:\n%s" % args.gmt)
-    gene_set_clustering(genesets, args)
+    gene_set_clustering(matrx, genesets, args)
 
 
 def enrich(matrx, args):
@@ -237,6 +237,10 @@ def main():
                         help='Path to MultiModalGenes directory',
                         required=False)
 
+    parser.add_argument('-s', '--scan',
+                        help='Scans minimum probability component values for enrich method',
+                        nargs='+')
+
     parser.add_argument('--go-enrichment',
                         help='Performs GO enrichment analysis using gene set database',
                         dest='go_enrichment',
@@ -315,6 +319,11 @@ def main():
                         type=int,
                         default=1)
 
+    parser.add_argument('--overwrite',
+                        help='Overwrite previous model',
+                        action='store_true',
+                        default=False)
+
     parser.add_argument('--test',
                         action='store_true')
 
@@ -347,7 +356,7 @@ def main():
         run_notebook()
         return
 
-    logger.info("Started Hydra...")
+    logger.info("Started Hydra v%s" % __version__)
     logger.info("Parameters:")
     for key, value in vars(args).items():
         logger.info('\t%s: %s' % (key, value))
@@ -365,7 +374,6 @@ def main():
     # Read in expression data
     logger.info("Reading in expression data:\n%s" % args.expression)
 
-    global matrx
     matrx = pd.read_csv(args.expression,
                         sep='\t',
                         index_col=0)
@@ -401,13 +409,14 @@ def main():
         filter(matrx, args)
 
     elif args.mode == 'sweep':
-        sweep(args)
+        sweep(matrx, args)
 
     elif args.mode == 'enrich':
-        enrich(args)
+        enrich(matrx, args)
         enrichment_notebook(args.expression,
                             args.output_dir)
 
 
 if __name__ == '__main__':
+    __version__ = "0.3.0"
     main()

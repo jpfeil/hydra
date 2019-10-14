@@ -113,6 +113,7 @@ def plotGauss2DFromHModel(
         ax_handle=None,
         dataset=None,
         Colors=Colors,
+        samp_colors=None,
         **kwargs):
     ''' Plot 2D contours for components in hmodel in current pylab figure
 
@@ -150,10 +151,18 @@ def plotGauss2DFromHModel(
 
 
     if dataset is not None and hasattr(dataset, 'X'):
-        pylab.plot(
-            dataset.X[:, 0], dataset.X[:, 1], '.', 
-            color=(.3,.3,.3),
-            alpha=0.5)
+        if samp_colors:
+            for (start, stop), value in samp_colors.items():
+                pylab.plot(
+                    dataset.X[start: stop, 0], dataset.X[start: stop, 1], '.',
+                    color=value,
+                    alpha=0.5)
+        else:
+            pylab.plot(
+                dataset.X[:, 0], dataset.X[:, 1], '.',
+                color=(0.3, 0.3, 0.3),
+                alpha=0.5)
+
 
     nSkip = 0
     nGood = 0

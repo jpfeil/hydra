@@ -31,6 +31,7 @@ RUN conda update -y conda
 RUN conda install -y intel-openmp=2019.4
 RUN conda install -y seaborn numpy pandas scipy jupyter 
 RUN conda install -y -c anaconda jupyter_client 
+RUN conda install -y -c conda-forge plotnine 
 RUN pip install scikit-posthocs xlrd ipykernel
 
 # Install necessary R libraries
