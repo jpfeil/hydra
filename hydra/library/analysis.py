@@ -248,6 +248,8 @@ class MultivariateMixtureModel(object):
             print 'WARNING: Number of genes outnumbers samples. ' \
                   'Consider more stringent filtering.'
 
+        self.logger = logging.getLogger('root')
+
     def fit(self, name='MultivariateAnalysis', verbose=False):
         """
 
@@ -318,6 +320,7 @@ class MultivariateMixtureModel(object):
         for row in range(LP['resp'].shape[0]):
             _max = np.max(LP['resp'][row, :])
             if _max < unclass:
+                self.logger.info("WARNING: At least one sample was not classified!!!")
                 asnmts.append(-1)
 
             else:

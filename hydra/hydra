@@ -13,6 +13,7 @@ import re
 from library.analysis import EnrichmentAnalysis
 from library.filter import filter, filter_gene_sets
 from library.fit import apply_multivariate_model
+from library.predict import predict
 from library.notebook import enrichment_notebook
 from library.utils import mkdir_p, \
                           get_genesets, \
@@ -222,6 +223,7 @@ def main():
                         filter - applied multimodal filter
                         enrich - performs unsupervised enrichment analysis
                         sweep - performs within gene set clustering
+                        predict - takes a model and returns assignments for new data
                         notebook - spins up jupyter notebook"""))
 
     parser.add_argument('-e', '--expression',
@@ -235,6 +237,11 @@ def main():
     parser.add_argument('-m', '--multimodal',
                         dest='mm_path',
                         help='Path to MultiModalGenes directory',
+                        required=False)
+
+    parser.add_argument('-f', '--fit',
+                        dest='fit_path',
+                        help='Path to model fit directory for predict method',
                         required=False)
 
     parser.add_argument('-s', '--scan',
@@ -405,7 +412,10 @@ def main():
     logger.info("Number of genes after "
                 "removing misformatted genes: %d" % matrx.shape[0])
 
-    if args.mode == 'filter':
+    if args.mode == 'predict':
+        predict(matrx, args)
+
+    elif args.mode == 'filter':
         filter(matrx, args)
 
     elif args.mode == 'sweep':
