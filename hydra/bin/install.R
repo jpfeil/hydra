@@ -8,7 +8,6 @@ install.packages('factoextra', repos='http://cran.us.r-project.org')
 install.packages('NB', repos='http://cran.us.r-project.org')
 install.packages('tidyverse', repos='http://cran.us.r-project.org')
 
-
 source("https://bioconductor.org/biocLite.R")
 biocLite("annotate")
 biocLite("geneplotter")

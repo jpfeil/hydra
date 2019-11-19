@@ -252,8 +252,9 @@ class MultivariateMixtureModel(object):
 
     def fit(self, name='MultivariateAnalysis', verbose=False):
         """
+        Fits the multivariate analysis
 
-        :param name:
+        :param name: Name for the output directory
         :return:
         """
         # This is a pandas dataframe: genes x samples
@@ -296,9 +297,13 @@ class MultivariateMixtureModel(object):
         return self.hmodel
 
     def get_assignments(self, data):
+        """
+
+        :param data:
+        :return:
+        """
         # This is a new pandas dataframe that may
         # not be the same as the one we trained on
-
         genes = self.og_data.index.values
         data = data.reindex(genes).dropna()
         if self.center:
@@ -407,6 +412,12 @@ class MultivariateMixtureModel(object):
         raise NotImplementedError('Sorry! Still working on this')
 
 
+class PreFitMultivariateModel(MultivariateMixtureModel):
+    def __init__(self, model, data):
+        super(PreFitMultivariateModel, self).__init__(data)
+        self.model = model
+
+
 class HClust(object):
     def __init__(self, data, method='ward', metric='euclidean'):
         self.og_data = data.copy()
@@ -500,6 +511,10 @@ class HClust(object):
         return groups
 
     def plot(self):
+        """
+
+        :return:
+        """
         return sns.clustermap(self.og_data,
                               z_score=0,
                               col_linkage=self.col_linkage,
@@ -720,6 +735,13 @@ def kl(m1, S1, m2, S2):
 
 
 def label(pth, data):
+    """
+    Labels data using bnpy model fit
+
+    :param pth:
+    :param data:
+    :return:
+    """
     gene = os.path.basename(pth)
     model = bnpy.ioutil.ModelReader.load_model_at_prefix(pth,
                                                              prefix=gene)
