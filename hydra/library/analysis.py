@@ -228,7 +228,7 @@ class MultivariateMixtureModel(object):
                  gamma=5.0,
                  variance=2.0,
                  K=5,
-                 center=False,
+                 center=True,
                  verbose=False):
 
         self.gamma = gamma
@@ -241,13 +241,6 @@ class MultivariateMixtureModel(object):
         self.hmodel = None
         self.clusters = None
         self.cluster_features = None
-
-        self.hmodel = self.fit()
-
-        if self.og_data.shape[0] > self.og_data.shape[1]:
-            print 'WARNING: Number of genes outnumbers samples. ' \
-                  'Consider more stringent filtering.'
-
         self.logger = logging.getLogger('root')
 
     def fit(self, name='MultivariateAnalysis', verbose=False):
@@ -257,6 +250,10 @@ class MultivariateMixtureModel(object):
         :param name: Name for the output directory
         :return:
         """
+        if self.og_data.shape[0] > self.og_data.shape[1]:
+            print 'WARNING: Number of genes outnumbers samples. ' \
+                  'Consider more stringent filtering.'
+
         # This is a pandas dataframe: genes x samples
         data = self.og_data
         if self.center:
@@ -332,6 +329,32 @@ class MultivariateMixtureModel(object):
                 _arg = np.argmax(LP['resp'][row, :])
                 asnmts.append(_arg)
         return asnmts
+
+    def get_probability(self, data):
+        """
+        Returns the cluster probabilities
+
+        :param data:
+        :return:
+        """
+        # This is a new pandas dataframe that may
+        # not be the same as the one we trained on
+        genes = self.og_data.index.values
+        data = data.reindex(genes).dropna()
+        if self.center:
+            data = data.sub(self.og_data.mean(axis=1), axis=0)
+
+        # If the data is one-dimensional, then reshape
+        if data.ndim == 1:
+            data = data.values.reshape(1, data.shape[0])
+
+        # Else take the transpose
+        else:
+            data = data.T.values
+
+        xdata = bnpy.data.XData(data)
+        LP = self.hmodel.calc_local_params(xdata)
+        return LP["resp"]
 
     def get_cluster_features(self, exp, gmt=None):
         """
@@ -413,9 +436,20 @@ class MultivariateMixtureModel(object):
 
 
 class PreFitMultivariateModel(MultivariateMixtureModel):
-    def __init__(self, model, data):
+    def __init__(self, model, data, center=True, verbose=False):
         super(PreFitMultivariateModel, self).__init__(data)
-        self.model = model
+        self.gamma = None
+        self.variance = None
+        self.K = None
+        self.center = center
+        self.verbose = verbose
+        self.hmodel = model
+        self.clusters = collections.defaultdict(list)
+        for sample, cluster in zip(self.og_data.columns, self.get_assignments(self.og_data)):
+            self.clusters[cluster].append(sample)
+
+    def fit(self, name="NA", verbose=False):
+        raise ValueError("Cannot refit a pre-fit model")
 
 
 class HClust(object):
