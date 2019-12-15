@@ -725,7 +725,7 @@ def _get_enrichment_analysis(mm_path, exp_path, gmt_path, min_prob_filter, min_e
                                             gamma,
                                             variance,
                                             K,
-                                            center)
+                                            center).fit()
             num_clusters = len(clus.clusters)
         else:
             num_clusters = np.nan
