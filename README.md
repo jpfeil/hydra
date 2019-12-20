@@ -5,7 +5,7 @@ differentially expressed pathways. The hydra pipeline includes
 routines for identifying multimodally distributed genes, scanning for 
 differentially expressed gene sets, and identifying enriched gene 
 sets from multimodally expressed genes. Hydra is available as a 
-docker container for easy deployment.
+docker container for easy deployment (https://hub.docker.com/r/jpfeil/hydra).
 
 ## Gene Set Analysis
 Use the sweep command to search for differential expression across a database 
