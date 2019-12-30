@@ -1,6 +1,7 @@
 #!/usr/bin/env python2.7
 import bnpy
 import collections
+import glob
 import itertools
 import logging
 import matplotlib.pyplot as plt
@@ -633,16 +634,51 @@ class ScanEnrichmentAnalysis(object):
 
 
 class SweepAnalysis(object):
-    def __init__(self, path):
+    def __init__(self):
         """
+        Class for analyzing sweep results
 
         :param path (str): Path to MultivariateAnalysis directory
         """
+        self.path = None
 
+    def rank(self, path):
         self.path = path
 
-    def rank(self):
         hits = pd.DataFrame(columns=['gene-set', 'num_clusters', 'maxKL'])
+        for pth in glob.glob(os.path.join(self.path, "*")):
+            apth = os.path.join(pth, 'assignments.tsv')
+            a = pd.read_csv(apth, sep='\t', header=None)
+
+            if a[1].sum() > 0:
+                gs = os.path.basename(pth)
+                model = bnpy.ioutil.ModelReader.load_model_at_prefix(pth,
+                                                                     prefix=gs)
+                probs = model.allocModel.get_active_comp_probs()
+
+                max_kl = None
+                for i in range(len(probs)):
+                    for j in range(len(probs)):
+                        if i == j:
+                            continue
+
+                        mi = model.obsModel.get_mean_for_comp(i)
+                        Si = model.obsModel.get_covar_mat_for_comp(i)
+
+                        mj = model.obsModel.get_mean_for_comp(j)
+                        Sj = model.obsModel.get_covar_mat_for_comp(j)
+
+                        _kl = kl(mi, Si, mj, Sj)
+
+                        if _kl > max_kl:
+                            max_kl = _kl
+
+                hits.loc[len(hits), :] = [gs,
+                                          len(probs),
+                                          min(probs),
+                                          max_kl]
+        return hits
+
 
 def fancy_dendrogram(*args, **kwargs):
     """
@@ -778,6 +814,6 @@ def label(pth, data):
     """
     gene = os.path.basename(pth)
     model = bnpy.ioutil.ModelReader.load_model_at_prefix(pth,
-                                                             prefix=gene)
+                                                         prefix=gene)
     xdata = bnpy.data.XData(data.reshape(len(data), 1))
     return get_assignments(model, xdata)
