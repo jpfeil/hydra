@@ -1,4 +1,4 @@
-﻿### Overview
+0.3.3﻿### Overview
 There is a need for more flexible gene expression analyses for precision oncology applications. We developed an unsupervised clustering approach for identifying clinically relevant expression patterns. The hydra analysis framework uses state-of-the-art Bayesian non-parametric statistics to learn which genes are differentially expressed without the need for matched normal expression data. This is very useful in the pediatric oncology setting where matched normal tissue is usually not available.
 
 The hydra pipeline includes routines for identifying multimodally distributed genes, scanning for differentially expressed gene sets, and identifying enriched gene sets from multimodally expressed genes. Hydra is available as a docker container for easy deployment (see figure below).
@@ -14,7 +14,7 @@ The *enrich* command is useful for generating new hypotheses about subtype-speci
 Run the hydra command by itself or with -h flag to see all options and descriptions of all arguments:
 
  ```
- docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 -h
+ docker run -it -v $PWD:/data jpfeil/hydra:0.3.3 -h
  ```
 
 **Test:**
@@ -29,7 +29,7 @@ Use the filter tool to identify multimodally expressed genes in your expression 
 `-o [path to output directory]`
 
 ```
-docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 filter \
+docker run -it -v $PWD:/data jpfeil/hydra:0.3.3 filter \
 -e test/test-exp.tsv \
 -o test-filter \
 --CPU 15
@@ -50,7 +50,7 @@ The *sweep* command is designed to search for differentially expressed gene sets
 `--gmt-regex [Regex for subsetting gmt file to specific gene sets]`
 
 ```
-docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 sweep \
+docker run -it -v $PWD:/data jpfeil/hydra:0.3.3 sweep \
 -e test/test-exp.tsv \
 -o test-sweep \
 --min-mean-filter 1.0 \
@@ -61,8 +61,6 @@ docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 sweep \
 
 After running the *sweep* analysis you can use the jupyter notebook to analyze the results (see last section of this README)).
 
-~
-
 *Option 2:*  Unsupervised Enrichment Analysis Using *enrich*
 The *enrich* command finds enrichment of multimodally expressed genes within a user-defined database of gene sets. There are two ways to perform the *enrich* analysis. The first way is to use the command-line tool, but we actually recommend using the Jupyter notebook approach because it provides more flexibility for investigating clusters. We will first present the command-line approach, but we encourage the user to also read the Jupyter notebook approach below.
 
@@ -70,7 +68,7 @@ The *enrich* method includes an important parameter known as the minimum compone
 
 Perform GO enrichment clustering across multimodally expressed genes
 ```
-docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 enrich \
+docker run -it -v $PWD:/data jpfeil/hydra:0.3.3 enrich \
 -e <PATH to expression tsv file> \
 -m <PATH to MultiModalGenes dir> \
 --min-prob-filter 0.1 \
@@ -81,7 +79,7 @@ docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 enrich \
 Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag. The enrichment analysis uses the clusterProfiler tool, which requires the gene set database use entrez ids. The gene expression input matrix should still use gene symbols.
 
 ```
-docker run -it -v $PWD:/data jpfeil/hydra:0.2.4 enrich \
+docker run -it -v $PWD:/data jpfeil/hydra:0.3.3 enrich \
 -e test/test-exp.tsv \
 -m <PATH to MultiModalGenes dir> \
 --min-prob-filter 0.1 \
@@ -94,7 +92,7 @@ Now you can use the jupyter notebook to analyze the results (see next section).
 **Step 3:** Analyze results with Jupyter notebook
 Interactive environment for investigating expression data. This comes with all of the hydra code and dependencies pre-installed.
 
-`docker run -it -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.2.4 notebook -e None`
+`docker run -it -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.3.3 notebook -e None`
 
 The token for accessing the Jupyter notebook is printed to stdout.
 
@@ -118,7 +116,7 @@ hits = hydra.SweepAnalysis().rank(<path to MultivariateAnalysis directory>)
 ```
 This provides the number of clusters identified and the Kullback–Leibler divergence, which is a measure of how different the clusters are in expression space. We recommend prioritizing gene-sets with a large Kullback-Leibler divergence, to identify clusters that have significantly different expression patterns.
 
-It is also possible to perform the *enrich* analysis in a Jupyter notebook on your laptop. All you need is the path to the input expression matrix and the directory of MultiModalGene models. 
+It is also possible to perform the *enrich* analysis in a Jupyter notebook on your laptop. All you need is the path to the input expression matrix and the directory of MultiModalGene models.
 
 The minimum component probability filter can be used to tune the resolution of the clustering analysis with respect to the number of samples available. We provide a method ScanEnrichmentAnalysis to explore how the minimum probability thresholds influence gene set enrichment and the number of clusters.
 
@@ -131,7 +129,7 @@ scan = hydra.ScanEnrichmentAnalysis(mm_path,
 ```
 
 
-  
+
 Then in the EnrichmentAnalysis method, use a min_prob_filter from the ScanEnrichmentAnalysis results which maximizes the number of clusters.
 
 ```
@@ -149,10 +147,12 @@ clus = hydra.MultivariateMixtureModel(data=exp.reindex(genes),
                                       variance=2.0,
                                       K=5)
 
+clus.fit()
+
 assignments = clus.get_assignments(exp.reindex(genes))
 ```
 
-We also provide routines for characterizing clusters using GSEA. 
+We also provide routines for characterizing clusters using GSEA.
 
 ```
 features = clus.get_cluster_features(exp,  # Original expression DataFrame
@@ -164,5 +164,3 @@ This analysis provides the gene-sets that are enriched in each cluster. This can
 subclust = clus.sub_cluster_gsea(sample_exp,
                                  gmt='/opt/hydra/gene-sets/h.all.v6.2.symbol.gmt')
 ```
-
-
