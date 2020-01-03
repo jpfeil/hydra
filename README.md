@@ -1,4 +1,4 @@
-0.3.3﻿### Overview
+### Overview
 There is a need for more flexible gene expression analyses for precision oncology applications. We developed an unsupervised clustering approach for identifying clinically relevant expression patterns. The hydra analysis framework uses state-of-the-art Bayesian non-parametric statistics to learn which genes are differentially expressed without the need for matched normal expression data. This is very useful in the pediatric oncology setting where matched normal tissue is usually not available.
 
 The hydra pipeline includes routines for identifying multimodally distributed genes, scanning for differentially expressed gene sets, and identifying enriched gene sets from multimodally expressed genes. Hydra is available as a docker container for easy deployment (see figure below).
