@@ -294,7 +294,7 @@ class MultivariateMixtureModel(object):
             self.clusters[cluster].append(sample)
         return self.hmodel
 
-    def get_assignments(self, data):
+    def get_assignments(self, data, print_prob=False):
         """
 
         :param data:
@@ -321,6 +321,9 @@ class MultivariateMixtureModel(object):
         LP = self.hmodel.calc_local_params(xdata)
         asnmts = []
         for row in range(LP['resp'].shape[0]):
+            if print_prob:
+                print(LP['resp'][row, :])
+
             _max = np.max(LP['resp'][row, :])
             if _max < unclass:
                 self.logger.info("WARNING: At least one sample was not classified!!!")
@@ -405,6 +408,10 @@ class MultivariateMixtureModel(object):
         :param alpha (float): P-value threshold for assessing statistical significance.
         :return:
         """
+
+        if not isinstance(data, pd.core.series.Series):
+            raise ValueError("Data must be of type pd.core.series.Series")
+
         a = self.get_assignments(data).pop()
         if a == -1:
             raise ValueError("Sample did not place in a cluster.")

@@ -15,7 +15,8 @@ RUN apt-get update --fix-missing && \
                        libssl-dev \
                        libcurl4-gnutls-dev \
                        libreadline7 \
-                       libicu-dev && \
+                       libicu-dev \
+                       libxt-dev && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
