@@ -14,7 +14,7 @@ The *enrich* command is useful for generating new hypotheses about subtype-speci
 Run the hydra command by itself or with -h flag to see all options and descriptions of all arguments:
 
  ```
- docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 -h
+ docker run --rm -v $PWD:/data jpfeil/hydra:0.3.4 -h
  ```
 
 **Test:**
@@ -29,7 +29,7 @@ Use the filter tool to identify multimodally expressed genes in your expression 
 `-o [path to output directory]`
 
 ```
-docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 filter \
+docker run --rm -v $PWD:/data jpfeil/hydra:0.3.4 filter \
 -e test/test-exp.tsv \
 -o test-filter \
 --CPU 15
@@ -50,7 +50,7 @@ The *sweep* command is designed to search for differentially expressed gene sets
 `--gmt-regex [Regex for subsetting gmt file to specific gene sets]`
 
 ```
-docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 sweep \
+docker run --rm -v $PWD:/data jpfeil/hydra:0.3.4 sweep \
 -e test/test-exp.tsv \
 -o test-sweep \
 --min-mean-filter 1.0 \
@@ -68,7 +68,7 @@ The *enrich* method includes an important parameter known as the minimum compone
 
 Perform GO enrichment clustering across multimodally expressed genes
 ```
-docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 enrich \
+docker run --rm -v $PWD:/data jpfeil/hydra:0.3.4 enrich \
 -e <PATH to expression tsv file> \
 -m <PATH to MultiModalGenes dir> \
 --min-prob-filter 0.1 \
@@ -79,7 +79,7 @@ docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 enrich \
 Or you can perform enrichment analysis using a user-specified gene set with the --gmt flag. The enrichment analysis uses the clusterProfiler tool, which requires the gene set database use entrez ids. The gene expression input matrix should still use gene symbols.
 
 ```
-docker run --rm -v $PWD:/data jpfeil/hydra:0.3.3 enrich \
+docker run --rm -v $PWD:/data jpfeil/hydra:0.3.4 enrich \
 -e test/test-exp.tsv \
 -m <PATH to MultiModalGenes dir> \
 --min-prob-filter 0.1 \
@@ -92,7 +92,7 @@ Now you can use the jupyter notebook to analyze the results (see next section).
 **Step 3:** Analyze results with Jupyter notebook
 Interactive environment for investigating expression data. This comes with all of the hydra code and dependencies pre-installed.
 
-`docker run --rm -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.3.3 notebook -e None`
+`docker run --rm -v $(pwd):/data/ -p 8889:8888 jpfeil/hydra:0.3.4 notebook -e None`
 
 The token for accessing the Jupyter notebook is printed to stdout.
 
