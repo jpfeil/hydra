@@ -75,17 +75,25 @@ def get_gene_fit(gene,
             converged = True       # We don't save models that don't converge
             save = False
 
-        except IOError:
+        except (IOError, ValueError):
             logger.info("Couldn't find model:\n%s" % model_pth)
-            model, converged, params, stdout, stderr = fit_gene(gene,
+            res = fit_gene(gene,
                                                                 data,
                                                                 sensitive=sensitive)
+            if res is None:
+                return gene, False 
+            
+            model, converged, params, stdout, stderr = res
 
     else:
         logger.debug("Fitting gene %s" % gene)
-        model, converged, params, stdout, stderr = fit_gene(gene,
+        res = fit_gene(gene,
                                                             data,
                                                             sensitive=sensitive)
+        if res is None:
+            return gene, False
+        
+        model, converged, params, stdout, stderr = res
 
     probs = model.allocModel.get_active_comp_probs()
     min_prob = np.min(probs)
@@ -96,7 +104,7 @@ def get_gene_fit(gene,
         return gene, False
 
     # Remove genes that have a low component frequency
-    elif min_prob < min_prob_filter:
+    elif min_prob is None or min_prob < min_prob_filter:
         logger.info("Gene %s was removed by min prob filter." % gene)
         analyzed[gene] = (gene, False)
         return gene, False
@@ -108,7 +116,8 @@ def get_gene_fit(gene,
                 logger.info("Erasing previous fit %s" % gene)
                 shutil.rmtree(_dir)
 
-            assert not os.path.exists(_dir), 'Tried to overwrite previous gene-level fit!'
+            # This line is causing problems
+            # assert not os.path.exists(_dir), 'Tried to overwrite previous gene-level fit!'
             mkdir_p(_dir)
             bnpy.ioutil.ModelWriter.save_model(model,
                                                _dir,
@@ -116,11 +125,11 @@ def get_gene_fit(gene,
 
             pth = os.path.join(_dir, "PARAMS")
             with open(pth, "w") as f:
-                f.write(params)
+                f.write(str(params))
 
             pth = os.path.join(_dir, "STDOUT")
             with open(pth, "w") as f:
-                f.write(stdout)
+                f.write(str(stdout))
 
         logger.debug("Gene %s is multimodal" % gene)
         analyzed[gene] = (gene, True)

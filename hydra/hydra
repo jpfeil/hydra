@@ -265,14 +265,14 @@ def main():
                         help='Removes genes with an average expression below value.'
                              'Used in gene-wise clustering step.',
                         type=float,
-                        default=None)
+                        default=1.0)
 
     parser.add_argument('--min-prob-filter',
                         dest='min_prob_filter',
                         help='Removes genes with a minor component less than value. '
                              'Used in gene-wise clustering step.',
                         type=float,
-                        default=None)
+                        default=0.05)
 
     parser.add_argument('--min-gene-filter',
                         dest='min_num_filter',
@@ -284,7 +284,7 @@ def main():
                         dest='min_effect_filter',
                         help='Removes genes with a minimum effect less than value.',
                         type=float,
-                        default=None)
+                        default=0.05)
 
     parser.add_argument('-K',
                         help='Number of clusters to start with for multivariate clustering',

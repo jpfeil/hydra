@@ -18,10 +18,10 @@ def get_path_to_eigen():
 
 def get_path_to_boost():
     try:
-        eigen_path = os.environ['BOOSTMATHPATH']
+        boost_path = os.environ['BOOSTMATHPATH']
     except KeyError as e:
-        eigen_path = ''
-    return eigen_path
+        boost_path = ''
+    return boost_path
 
 def make_extensions():
     ''' Assemble C++/Cython extension objects for compilation
@@ -41,17 +41,17 @@ def make_extensions():
         ext_list.append(make_cpp_extension_libfwdbwd())
         ext_list.append(make_cpp_extension_libsparsemix())
     else:
-        print "Warning: Environment variable EIGENPATH not found."
-        print "Will not compile the following C++ extensions"
-        print " - libsparsemix (for L-sparse mixtures)"
-        print " - libfwdbwd (for fast local steps for HMMs)"
+        print("Warning: Environment variable EIGENPATH not found.")
+        print("Will not compile the following C++ extensions")
+        print(" - libsparsemix (for L-sparse mixtures)")
+        print(" - libfwdbwd (for fast local steps for HMMs)")
     if get_path_to_eigen() and get_path_to_boost():
         ext_list.append(make_cpp_extension_libsparsetopics())
         ext_list.append(make_cpp_extension_libsparsetopicsmanydocs())
     else:
-        print "Warning: Environment variable BOOSTMATHPATH not found."
-        print "Will not compile the following C++ extensions"
-        print " - libsparsetopics (for L-sparse topic models)"
+        print("Warning: Environment variable BOOSTMATHPATH not found.")
+        print("Will not compile the following C++ extensions")
+        print(" - libsparsetopics (for L-sparse topic models)")
     return ext_list
 
 def make_cpp_extension_libfwdbwd():
@@ -128,12 +128,6 @@ def add_directives_to_cython_ext(ext):
         'wraparound':False}
     return ext
 
-def read_txt_file_as_string(fname='README.md'):
-    s = ""
-    with open(os.path.join(os.path.dirname(__file__), fname), 'r') as f:
-        s = f.read()
-    return s
-
 class CustomizedBuildExt(build_ext):
     ''' Custom override of some default build options
 
@@ -178,22 +172,27 @@ def make_list_of_datasets_specs():
         for fpath in fpath_list:
             if (fpath.endswith('.npz')
                     or fpath.endswith('.csv')
+                    or fpath.endswith('.ldac')
                     or fpath.endswith('.txt')):
                 full_fpath = os.path.join(root, fpath)
                 full_dirpath = os.path.split(full_fpath)[0] + os.path.sep
                 data_spec = (
                     full_dirpath,
                     [full_fpath])
-                print data_spec
+                print(data_spec)
                 data_spec_list.append(data_spec)
     return data_spec_list
 
 
 ########################################################################
 # Main function
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description_str = fh.read()
+
 setup(
     name="bnpy",
-    version="0.1.6",
+    version="0.1.7",
     author="Michael C. Hughes",
     author_email="mike@michaelchughes.com",
     description=(
@@ -205,14 +204,20 @@ setup(
         "topic model",
         "hidden Markov model"],
     url="https://github.com/bnpy/bnpy",
+    project_urls={
+        'Documentation':'https://bnpy.readthedocs.io',
+        'Source':'https://github.com/bnpy/bnpy',
+        'Issue Tracker':'https://github.com/bnpy/bnpy/issues',
+        },
     packages=make_list_of_subpackages(),
     package_data = {
         # If any subpackage contains these files, include them:
-        '': ['*.conf', '*.txt', '*.md', '*.npz', '*.csv'],
+        '': ['*.conf', '*.txt', '*.md', '*.npz', '*.csv', '*.ldac'],
         '': ['*.cpp', '*.c', '*.h', '*.pyx'],
     },
     include_package_data=True,
-    long_description='',
+    long_description=long_description_str,
+    long_description_content_type='text/markdown',
     classifiers=[
         "Development Status :: 3 - Alpha",
         "License :: OSI Approved :: BSD License"],
@@ -225,9 +230,9 @@ setup(
         "ipython>=5.1",
         "scikit_learn>=0.18",
         "matplotlib>=1.5",
-        "joblib>=0.10",
+        "joblib==0.14.1",
         "memory_profiler>=0.41",
-        "munkres>=1.0",
+        "munkres==1.0.12",
         "numexpr>=2.6",
         "psutil>=5.0",
         "sphinx_gallery>=0.1",

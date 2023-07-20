@@ -19,8 +19,9 @@ from scipy.spatial import distance
 from scipy.cluster import hierarchy
 from scipy.cluster.hierarchy import fcluster, dendrogram
 
+from sklearn.metrics import adjusted_rand_score
+
 from library.fit import run, get_assignments
-from library import cyrand
 
 src = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 
@@ -49,7 +50,7 @@ class RandAnalysis(object):
         self.logger.info("Instantiated Rand index matrix: %d x %d" % (len(genes), len(genes)))
         rindex = pd.DataFrame(index=genes, columns=genes)
         for (g1, l1), (g2, l2) in itertools.combinations(results, 2):
-            rindex.loc[g1, g2] = cyrand.ri(l1, l2)
+            rindex.loc[g1, g2] = adjusted_rand_score(l1, l2)
 
         # Fill in lower half of the matrix
         lower = np.ones(rindex.shape, dtype='bool')
@@ -252,14 +253,14 @@ class MultivariateMixtureModel(object):
         :return:
         """
         if self.og_data.shape[0] > self.og_data.shape[1]:
-            print 'WARNING: Number of genes outnumbers samples. ' \
-                  'Consider more stringent filtering.'
+            print('WARNING: Number of genes outnumbers samples. ' \
+                  'Consider more stringent filtering.')
 
         # This is a pandas dataframe: genes x samples
         data = self.og_data
         if self.center:
             if self.verbose:
-                print 'centering data'
+                print('centering data')
             data = data.apply(lambda x: x - x.mean(), axis=1)
 
         data = data.T.values

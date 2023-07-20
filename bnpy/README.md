@@ -1,17 +1,19 @@
 ## **bnpy** : Bayesian nonparametric machine learning for python.
 
-* [About](#about)
-* [Project Website (Read the Docs)](https://bnpy.readthedocs.io/en/latest/)
-* [Example Gallery](#example-gallery)
-* [Quick Start](#quick-start)
-* [Installation](#installation)
-* [Team](#team)
-* [Academic References](#academic-references)
-* * [NIPS 2015: HDP-HMM paper](#nips-2015-hdp-hmm-paper)
-* * [AISTATS 2015: HDP topic models](#aistats-2015-hdp-topic-model-paper)
-* * [NIPS 2013: DP mixture models](#nips-2013-dp-mixtures-paper)
+[Project Website](https://bnpy.readthedocs.io/en/latest/)
+&#8226;
+[Example Gallery](https://bnpy.readthedocs.io/en/latest/examples/)
+&#8226;
+[Installation](https://bnpy.readthedocs.io/en/latest/installation.html)
+&#8226;
+[Team](#team)
+&#8226;
+[Academic Papers](#academic-papers)
+&#8226;
+[Report an Issue](https://github.com/bnpy/bnpy/issues)
 
 # About
+
 This python module provides code for training popular clustering models on large datasets. We focus on Bayesian nonparametric models based on the Dirichlet process, but also provide parametric counterparts. 
 
 **bnpy** supports the latest online learning algorithms as well as standard offline methods. Our aim is to provide an inference platform that makes it easy for researchers and practitioners to compare models and algorithms.
@@ -30,9 +32,6 @@ This python module provides code for training popular clustering models on large
     * `FiniteHMM` : Markov sequence model with a fixture number of states
     *  `HDPHMM` : Markov sequence models with an infinite number of states
 
-* **COMING SOON**
-    * grammar models
-    * relational models
 
 ### Supported data observation models (aka likelihoods)
 
@@ -47,16 +46,17 @@ This python module provides code for training popular clustering models on large
 
 ### Supported learning algorithms:
 
-* Expectation-maximization (offline)
+* Expectation-maximization
     * `EM`
-* Full-dataset variational Bayes (offline)
+* Full-dataset variational Bayes
     * `VB`
-* Memoized variational (online)
+* Memoized variational (can process small minibatches per update step)
     * `moVB`
-* Stochastic variational (online)
+* Stochastic variational (can process small minibatches per update step)
     * `soVB`
 
-These are all variants of *variational inference*, a family of optimization algorithms. We plan to eventually support sampling methods (Markov chain Monte Carlo) too.
+These are all variants of *variational inference*, a family of optimization algorithms. 
+
 
 # Example Gallery
 
@@ -115,23 +115,19 @@ To use **bnpy** for the first time, follow the documentation's [Installation Ins
 
 # Team
 
-### Lead developer
+### Primary investigators
 
 Mike Hughes  
-Website: [www.michaelchughes.com](http://www.michaelchughes.com)
+Assistant Professor (Aug. 2018 - present)  
+Tufts University, Dept. of Computer Science  
+Website: <https://www.michaelchughes.com>  
 
-Post-doctoral researcher (Aug. 2016 - present)  
-School of Engineering and Applied Sciences  
-Harvard University  
+Erik Sudderth
+Professor  
+University of California, Irvine  
+Website: <https://www.ics.uci.edu/~sudderth/>  
 
-### Faculty adviser
-
-Erik Sudderth  
-Assistant Professor  
-Brown University, Dept. of Computer Science  
-Website: [http://cs.brown.edu/people/sudderth/](http://cs.brown.edu/people/sudderth/)
-
-### Contributors 
+### Contributors
 
 * Soumya Ghosh
 * Dae Il Kim
@@ -144,8 +140,9 @@ Website: [http://cs.brown.edu/people/sudderth/](http://cs.brown.edu/people/sudde
 * Mert Terzihan
 * Mengrui Ni
 * Jincheng Li
+* Xi Chen (Tufts)
 
-# Academic References
+# Academic Papers
 
 ## Conference publications based on BNPy
 

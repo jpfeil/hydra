@@ -2,6 +2,7 @@
 import os
 import re
 import bnpy
+import pandas as pd
 import tempfile
 import shutil
 import shlex
@@ -25,14 +26,14 @@ def enablePrint():
     sys.stdout = sys.__stdout__
 
 
-def run(cmd, timeout_sec=900):
+def run(cmd, cwd=None, timeout_sec=900):
     """
     https://stackoverflow.com/questions/1191374/using-module-subprocess-with-timeout
     :param cmd:
     :param timeout_sec:
     :return:
     """
-    proc = Popen(cmd, stdout=PIPE, stderr=PIPE)
+    proc = Popen(cmd, stdout=PIPE, stderr=PIPE, cwd=cwd)
     timer = Timer(timeout_sec, proc.kill)
 
     try:
@@ -74,20 +75,19 @@ def subprocess_fit(name,
 
     name = re.sub(r'[^\w\d-]', '_', name)
 
-    workdir = tempfile.mkdtemp(prefix="%s_" % name)
-    output_dir = 'K={K}-gamma={G}-ECovMat={Cov}-moves=birth,merge,delete,shuffle/'.format(K=K,
-                                                                                          G=gamma,
-                                                                                          Cov=sF)
-    output_path = os.path.join(workdir, output_dir)
+    workdir = os.path.abspath(tempfile.mkdtemp(prefix="%s_" % name))
+    output_path = os.path.abspath(os.path.join(workdir, "output"))
 
-    csv_file_path = os.path.join(workdir, "%s.csv" % name)
+    csv_file_path = os.path.abspath(os.path.join(workdir, "%s.csv" % name))
+
     assert dataset.dim > 0, 'Dataset has not dimension'
     assert dataset.get_size() > 2, 'Dataset needs more than two observations!'
+
     logger.debug("Gene %s\nSize %d\n" % (name, dataset.get_size()))
     dataset.to_csv(csv_file_path)
 
     cmd = """
-          python -m bnpy.Run {data} 
+          python3 -m bnpy.Run {data} 
                     DPMixtureModel 
                     Gauss 
                     memoVB 
@@ -113,14 +113,10 @@ def subprocess_fit(name,
                      dstart=dstart,
                      output=output_path)
 
-    stdout, stderr = run(shlex.split(cmd), timeout_sec=timeout_sec)
-
-    logger.debug(cmd)
-    logger.debug(stdout)
-    logger.debug(stderr)
+    stdout, stderr = run(shlex.split(cmd.strip()), cwd=workdir, timeout_sec=timeout_sec)
 
     converged = False
-    m = converged_regex.search(stdout)
+    m = converged_regex.search(str(stdout))
     if m:
         converged = True
 
@@ -129,11 +125,13 @@ def subprocess_fit(name,
         logger.debug(stderr)
 
     try:
-        hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.join(output_path, '1'),
+        hmodel = bnpy.ioutil.ModelReader.load_model_at_prefix(os.path.abspath(os.path.join(output_path, '1')),
                                                               prefix='Best')
-    except IOError:
-        print(stdout)
-        raise ValueError("%s model not found!" % name)
+
+    except Exception as e:
+        logger.exception(e)
+        logger.error(f"Error in loading {name} model!")
+        return
 
     params = "Gamma: {G}\nK: {K}\nsF: {sF}\nbStart: {b}\n" \
              "mStart: {m}\ndStart: {d}\nnLap: {n}".format(G=gamma,
@@ -145,8 +143,10 @@ def subprocess_fit(name,
                                                           n=nLap)
     if not save_output:
         shutil.rmtree(workdir)
+
     else:
         print("Output:\n%s" % workdir)
+
     return hmodel, converged, params, stdout, stderr
 
 
@@ -219,13 +219,18 @@ def apply_multivariate_model(input, args, output, name='MultivariateModel'):
                  "nLaps: %d" % (gamma, sF, K, nLap))
 
     # Fit multivariate model
-    hmodel, converged, params, stdout, stderr = subprocess_fit(name,
+    res = subprocess_fit(name,
                                                                dataset,
                                                                gamma,
                                                                sF,
                                                                K,
                                                                nLap=nLap,
                                                                timeout_sec=args.max_fit_time)
+
+    if res is None:
+        return
+
+    hmodel, converged, params, stdout, stderr = res
 
     if converged is False:
         logging.info("WARNING: Multivariate model did not converge!")
@@ -257,7 +262,7 @@ def apply_multivariate_model(input, args, output, name='MultivariateModel'):
     create_notebook(name, output)
 
     with open(os.path.join(output, 'PARAMS'), 'w') as f:
-        f.write(params)
+        f.write(str(params))
 
     with open(os.path.join(output, 'STDOUT'), 'w') as f:
-        f.write(stdout)
+        f.write(str(stdout))
